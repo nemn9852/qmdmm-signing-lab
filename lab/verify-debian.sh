@@ -101,6 +101,13 @@ run_scenario "D. keyring source (root-signed) + packages key" "$W/packages.gpg" 
 
 echo
 echo "=============================================================="
+echo "  after a rotation: does a revoked subkey's old output still pass?"
+echo "=============================================================="
+run_scenario "E. source signed by the REVOKED subkey + current packages key" \
+             "$W/packages.gpg" "daily-revoked" FAIL
+
+echo
+echo "=============================================================="
 echo "  all assertions passed: the keyring source only answers to root;"
 echo "  this line's subkey cannot sign anything that replaces the trust root"
 echo "=============================================================="

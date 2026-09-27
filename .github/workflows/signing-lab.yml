@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: debian                     # <- only this makes SIGNING_KEY visible
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Probe whether stdin can be piped into a container here
         run: |
           set -euo pipefail
@@ -55,7 +55,7 @@ jobs:
             -e SUB_FPR="$SUB_DEBIAN" \
             debian:sid bash /w/lab/sign-debian.sh
           sudo chmod -R a+rX out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: repo-debian
           path: out/debian
@@ -65,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: fedora
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Sign the day-to-day source inside fedora:latest
         env:
           SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
@@ -78,7 +78,7 @@ jobs:
             -e SUB_FPR="$SUB_FEDORA" \
             fedora:latest bash /w/lab/sign-fedora.sh
           sudo chmod -R a+rX out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: repo-fedora
           path: out/fedora
@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: arch
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Sign the day-to-day source inside archlinux:base
         env:
           SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
@@ -101,7 +101,7 @@ jobs:
             -e SUB_FPR="$SUB_ARCH" \
             archlinux:base bash /w/lab/sign-arch.sh
           sudo chmod -R a+rX out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: repo-arch
           path: out/arch
@@ -116,8 +116,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Assemble the site
@@ -151,11 +151,11 @@ jobs:
           } > _site/index.html
           echo "--- site contents ---"
           (cd _site && find . -type f | sort)
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
       - id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   # ===================== consumer side: no environment, no secret =====================
 
@@ -163,7 +163,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [publish]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Confirm no secret is reachable (a consumer's position)
         env:
           LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
@@ -186,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [publish]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Confirm no secret is reachable (a consumer's position)
         env:
           LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
@@ -209,7 +209,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [publish]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Confirm no secret is reachable (a consumer's position)
         env:
           LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
