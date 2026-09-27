@@ -1,0 +1,5 @@
+Package: qmdmm-lab
+Version: 1.0
+Architecture: all
+Maintainer: QMdmm signing lab <lab@example.invalid>
+Description: frozen snapshot, signed by the subkey that is revoked next

@@ -1,0 +1,110 @@
+<!doctype html><meta charset="utf-8">
+<title>QMdmm signing lab</title>
+<h1>QMdmm signing lab</h1>
+<p>A disposable end-to-end test of the QMdmm distro signing scheme.
+These are test keys and are revoked when the lab ends.</p>
+<h2>Fingerprints</h2><pre>
+QMdmm signing lab — public key fingerprints
+===========================================
+
+THIS IS A DISPOSABLE TEST KEYRING. It has no value, signs nothing real,
+and is revoked at the end of the lab. Do not trust it.
+
+Root key — signs only keyring packages / *-release packages
+----------------------------------------------------------
+  DB05 E5D9 0271 39A4 93E7  C9DD CD29 0DDA 2AE8 3D38
+  keyid CD290DDA2AE83D38
+  uid   QMdmm Signing Lab Root &lt;root@qmdmm-lab.invalid>
+
+Per-distro operational subkeys — sign packages + repository metadata
+--------------------------------------------------------------------
+  debian  52A6 DA92 508F 487E A0EC  6DF5 3F46 22CC 95CD BFB4
+  fedora  0CB6 055F E24F CC8B EEFB  6D99 808E B86A 8399 B375
+  rocky   D743 4719 FF39 FB0C 1864  DA0D EC44 64A9 8E83 0643
+  alma    C127 1012 58DC C185 D36D  58AD A663 1EAC 4DDC 9F27
+  arch    1D56 9E0B 4281 AA59 A132  17B0 B768 1D06 0915 9052
+
+These subkeys are bound to the root key above, so anyone holding the root
+public key can attribute their signatures without a new trust anchor.
+
+Repository roots
+----------------
+One directory per line. &lt;pages> below is the site root, so a consumer's
+sources.list / baseurl points straight at it:
+
+  &lt;pages>/debian           day-to-day source (subkey-signed)           suite: sid
+  &lt;pages>/debian-keyring   keyring source (root-signed)                suite: sid
+  &lt;pages>/debian-revoked   fixture signed by a since-revoked subkey — must be
+                           rejected by anything holding the current keys
+  &lt;pages>/fedora           rpm, subkey-signed
+  &lt;pages>/rocky            rpm, subkey-signed
+  &lt;pages>/alma             rpm, subkey-signed
+  &lt;pages>/arch             pacman, subkey-signed
+
+Two sources, two directories
+----------------------------
+The keyring source and the day-to-day source cannot share a directory: apt's
+Signed-By names one key file per source, and the whole design rests on the
+keyring source being verifiable by the root key ALONE. So:
+
+  keys/qmdmm-root.gpg               root public key only (no subkeys)
+                                    -> the keyring repo's Signed-By
+  keys/&lt;distro>/qmdmm-packages.gpg  root public key + that line's subkey
+                                    -> the day-to-day repo's Signed-By
+</pre><h2>Repository roots</h2><ul>
+<li><a href="debian/">debian/</a></li>
+<li><a href="debian-keyring/">debian-keyring/</a></li>
+<li><a href="debian-revoked/">debian-revoked/</a></li>
+<li><a href="fedora/">fedora/</a></li>
+<li><a href="rocky/">rocky/</a></li>
+<li><a href="alma/">alma/</a></li>
+<li><a href="arch/">arch/</a></li>
+</ul><h2>Tree</h2><pre>
+./alma/repodata/26b14e2821c9fd886e1b98774c18308144f11503e0af69b50d10c74a717884dc-filelists.xml.zst
+./alma/repodata/7ae5dcac806baf989da7e38ec24666f8bf12102325f50c22d27008d593300fe8-primary.xml.zst
+./alma/repodata/7ebfad1879300e2568fb55ceb448a24f516b3fcb337751f38884000827aa9ae4-other.xml.zst
+./alma/repodata/repomd.xml
+./alma/repodata/repomd.xml.asc
+./alma/tree-2.1.0-8.el10.x86_64.rpm
+./arch/lab.db
+./arch/lab.db.sig
+./arch/lab.db.tar.gz
+./arch/lab.db.tar.gz.sig
+./arch/lab.files
+./arch/lab.files.sig
+./arch/lab.files.tar.gz
+./arch/lab.files.tar.gz.sig
+./arch/qmdmm-lab-1.0-1-any.pkg.tar.zst
+./arch/qmdmm-lab-1.0-1-any.pkg.tar.zst.sig
+./debian-keyring/dists/sid/InRelease
+./debian-keyring/dists/sid/Release
+./debian-keyring/dists/sid/main/binary-all/Packages
+./debian-keyring/dists/sid/main/binary-all/Packages.gz
+./debian-revoked/dists/sid/InRelease
+./debian-revoked/dists/sid/Release
+./debian-revoked/dists/sid/main/binary-all/Packages
+./debian-revoked/dists/sid/main/binary-all/Packages.gz
+./debian/dists/sid/InRelease
+./debian/dists/sid/Release
+./debian/dists/sid/main/binary-all/Packages
+./debian/dists/sid/main/binary-all/Packages.gz
+./fedora/repodata/2032c6eed3e28fac9318fd89e8b6f9704a81e1d19e801cf48b7039571895ac3d-primary.xml.zst
+./fedora/repodata/30eacf3b456ef49bfb67e4a4646dd016429d48838c4a72b05b0420ffb2dd6a1c-filelists.xml.zst
+./fedora/repodata/6149e8b89f96758c83eb1edb99c28d9cadc645cc5dfd08dd04ed3efeb6038464-other.xml.zst
+./fedora/repodata/repomd.xml
+./fedora/repodata/repomd.xml.asc
+./fedora/tree-2.2.1-2.fc43.x86_64.rpm
+./index.html
+./keys/alma/qmdmm-packages.gpg
+./keys/arch/qmdmm-packages.gpg
+./keys/debian/qmdmm-packages.gpg
+./keys/fedora/qmdmm-packages.gpg
+./keys/fingerprints.txt
+./keys/qmdmm-root.gpg
+./keys/rocky/qmdmm-packages.gpg
+./rocky/repodata/69a3730a283b85a4b3cff7d04bfde3b2b234f0607ebc17319d7a8d143a8e066e-primary.xml.zst
+./rocky/repodata/6b37cc67608a24beaa81e1191d218f2ffd6b1191dceb5c100bac2e66249d518d-other.xml.zst
+./rocky/repodata/9b07d97dc6ececed89aac0650b67bfb292647fe9fbaca48f629465be5f53f82b-filelists.xml.zst
+./rocky/repodata/repomd.xml
+./rocky/repodata/repomd.xml.asc
+</pre>

@@ -1,0 +1,5 @@
+Package: qmdmm-lab
+Version: 1.0
+Architecture: all
+Maintainer: QMdmm signing lab <lab@example.invalid>
+Description: keyring source (root-signed)
