@@ -2,13 +2,13 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: stable
 Codename: stable
-Date: Sun, 27 Sep 2026 02:28:08 UTC
+Date: Sun, 27 Sep 2026 02:33:52 UTC
 Architectures: all
 Components: main
 Description: keyring source (root-signed)
 MD5Sum:
- 00c681d92b8961758f5342c5ca414897              637 main/binary-all/Packages
- 51686f8989fcce0f80f5c1aeb840f3d0              428 main/binary-all/Packages.gz
+ d58f96163bcc3dc4e86c20432d9c77f8              144 main/binary-all/Packages
+ 849ecd14ebcd598de403fe49c5ce3a56              151 main/binary-all/Packages.gz
 SHA256:
- ce97f9be3b41b1c37c0e457ce4c81462b27ce8d810ebf97e092b042d767fd9f7              637 main/binary-all/Packages
- 647e6366b59b21eeb037d57a1b0974eec23c7861a78e8492afbe21abcd770c65              428 main/binary-all/Packages.gz
+ e3f158c3875d9a8fbb7e1c2762e00a5c8092c005e05b091f564dab8b611d23a9              144 main/binary-all/Packages
+ e8d95a5be4662a149e3e5530c06a52d15a0bcae04183476977d87ad286e6e5c9              151 main/binary-all/Packages.gz
