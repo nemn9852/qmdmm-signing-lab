@@ -15,7 +15,22 @@ name: signing-lab
 #   verify-* deliberately declare NO environment: they hold no secret at all,
 #            which is exactly a consumer's position.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      # Stage A packages whatever ref it is handed, the same way the harness's
+      # own workflow does. `git fetch --depth 1` resolves a branch or tag name or
+      # a full object name and nothing else, so a short SHA is not usable here.
+      qmdmm_ref:
+        description: 'QMdmm ref (branch, tag, or full 40-char SHA) to package'
+        required: false
+        default: 'main'
+        type: string
+      build_type:
+        description: 'CMake build type'
+        required: false
+        default: 'Release'
+        type: choice
+        options: [Release, MinSizeRel, Debug]
   push:
     branches: [main]
 
@@ -444,3 +459,59 @@ jobs:
             -v "$PWD:/w" -w /w \
             -e FMT="${{ matrix.fmt }}" -e HARNESS=/w/harness \
             "${{ matrix.image }}" bash /w/lab/probe-toolchain.sh
+
+  # ================================================================= stage A
+  # The real thing: the harness's own pack script, cloned from
+  # QMdmm/QMdmmPackagingCI, run inside each row's distribution image. Nothing
+  # here signs anything - that is stage S, and keeping them apart is what lets a
+  # package be built once and signed once per row rather than per consumer.
+  #
+  # Dispatch-only while it is being brought up: twelve Qt builds per push is not
+  # something to do to a repository that is still being iterated on.
+  stage-a-pack:
+    name: "A pack (${{ matrix.line }} ${{ matrix.version }})"
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: debian, fmt: deb, version: trixie, image: "debian:trixie", expect: "-6 -6-dev -common-dev -doc" }
+          - { line: debian, fmt: deb, version: forky, image: "debian:forky", expect: "-6 -6-dev -common-dev -doc" }
+          - { line: debian, fmt: deb, version: sid, image: "debian:sid", expect: "-6 -6-dev -common-dev -doc" }
+          - { line: ubuntu, fmt: deb, version: resolute, image: "ubuntu:resolute", expect: "-6 -6-dev -common-dev -doc" }
+          - { line: ubuntu, fmt: deb, version: stonking, image: "ubuntu:stonking", expect: "-6 -6-dev -common-dev -doc" }
+          - { line: fedora, fmt: rpm, version: 44, image: "fedora:44", expect: "-6 -6-devel -common-devel -doc" }
+          - { line: fedora, fmt: rpm, version: 45, image: "fedora:45", expect: "-6 -6-devel -common-devel -doc" }
+          - { line: fedora, fmt: rpm, version: rawhide, image: "fedora:rawhide", expect: "-6 -6-devel -common-devel -doc" }
+          - { line: rocky, fmt: rpm, version: 10, image: "rockylinux/rockylinux:10", expect: "-6 -6-devel -common-devel -doc" }
+          - { line: alma, fmt: rpm, version: 10, image: "almalinux:10", expect: "-6 -6-devel -common-devel -doc" }
+          - { line: arch, fmt: pac, version: rolling, image: "archlinux:base", expect: "-6" }
+          - { line: manjaro, fmt: pac, version: rolling, image: "manjarolinux/base:latest", expect: "-6" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Clone the packaging harness
+        run: git clone --depth 1 https://github.com/QMdmm/QMdmmPackagingCi.git harness
+      - name: Pack with the harness
+        working-directory: harness
+        env:
+          QMDMM_REPO: https://github.com/QMdmm/QMdmm.git
+          QMDMM_REF: ${{ github.event.inputs.qmdmm_ref || 'main' }}
+          QMDMM_BUILD_TYPE: ${{ github.event.inputs.build_type || 'Release' }}
+          DIST_EXPECT: ${{ matrix.expect }}
+        run: bash ci/pack-${{ matrix.fmt }}.sh
+      - name: Collect what was produced
+        working-directory: harness
+        run: |
+          set -euo pipefail
+          echo "--- out/ ---"
+          ls -l out/ | sed 's/^/  /'
+          echo "--- MANIFEST.tsv ---"
+          sed 's/^/  /' out/MANIFEST.tsv
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pack-${{ matrix.line }}-${{ matrix.version }}
+          path: harness/out/
+          if-no-files-found: error
