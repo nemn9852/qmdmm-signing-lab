@@ -398,3 +398,14 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             fedora:43 bash /w/lab/probe-fedora43-dnf5-upgrade.sh
+
+  # Issue #24 names container tags for the release matrix. `rockylinux:10` was
+  # wrong once and cost a run; check every tag resolves before the matrix is
+  # built on them. Fails if any tag is missing, so it is a real gate.
+  probe-matrix-tags:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the #24 container tags resolve
+        run: bash "$PWD/lab/probe-matrix-tags.sh"
