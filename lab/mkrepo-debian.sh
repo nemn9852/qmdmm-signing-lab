@@ -19,7 +19,11 @@ SUITE="${3:-sid}"
 DESC="${4:-QMdmm signing lab apt repository}"
 
 cd "$(dirname "$0")/.."                      # -> repo/
-source "$HOME/qmdmm-signing-lab/env.sh"      # GNUPGHOME
+# No local keyring is sourced here: this used to do
+#   source "$HOME/qmdmm-signing-lab/env.sh"
+# which is a trusted-machine file and does not exist in CI - it took all five deb
+# rows down with "No such file or directory" while the rpm and pacman rows passed.
+# The key is an argument; the keyring is whatever the calling script imported.
 source lab/lib-tools.sh                      # md5_of / sha_of / deb_control
 
 D="$OUT/dists/$SUITE"
