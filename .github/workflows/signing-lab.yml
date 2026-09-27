@@ -64,7 +64,7 @@ jobs:
       matrix:
         include:
           - { line: fedora, image: "fedora:43",     env: fedora }
-          - { line: rocky,  image: "rockylinux:10", env: rocky  }
+          - { line: rocky,  image: "rockylinux/rockylinux:10", env: rocky  }
           - { line: alma,   image: "almalinux:10",  env: alma   }
     environment: ${{ matrix.env }}
     steps:
@@ -208,7 +208,7 @@ jobs:
       matrix:
         include:
           - { line: fedora, image: "fedora:43"     }
-          - { line: rocky,  image: "rockylinux:10" }
+          - { line: rocky,  image: "rockylinux/rockylinux:10" }
           - { line: alma,   image: "almalinux:10"  }
     steps:
       - uses: actions/checkout@v7
