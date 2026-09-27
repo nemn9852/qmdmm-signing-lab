@@ -213,7 +213,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { line: fedora, image: "fedora:43"     }
+          # fedora:43 is rpm 6.0.2 / dnf5 5.2.18, which rejects repomd.xml signed
+          # by any gpg key (all six shapes probed - see FINDINGS.md 4.1). The
+          # assertion is inverted there so the job does not stay red and train
+          # everyone to ignore it: a later FAILURE means the limitation is gone
+          # and the flag should be dropped.
+          - { line: fedora, image: "fedora:43",                expect_metadata_rejected: "1" }
           - { line: rocky,  image: "rockylinux/rockylinux:10" }
           - { line: alma,   image: "almalinux:10"  }
     steps:
@@ -235,6 +240,7 @@ jobs:
             -e LAB_PAGES="$LAB_PAGES" -e ROOT_FPR="$ROOT_FPR" \
             -e EXPECT_SHA="${{ github.sha }}" \
             -e LINE="${{ matrix.line }}" \
+            -e EXPECT_METADATA_REJECTED="${{ matrix.expect_metadata_rejected || '0' }}" \
             "${{ matrix.image }}" bash /w/lab/verify-rpm.sh
 
   verify-arch:
