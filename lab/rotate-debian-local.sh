@@ -17,6 +17,9 @@
 # touched, and nothing here needs CI credentials.
 #
 # usage: rotate-debian-local.sh <distro>        (currently: debian)
+# TRUSTED-MACHINE TOOL, not a CI step (hence the -local suffix).
+# It sources the local keyring env on purpose: rotation needs the root key to
+# re-sign the keyring source, and the root secret never enters CI.
 set -euo pipefail
 
 DISTRO="${1:?usage: rotate-debian-local.sh <distro>}"

@@ -18,6 +18,10 @@
 # sign. That is the whole reason the keyring source exists as a separate repo.
 #
 # usage: mkkeyring-deb.sh <distro> <pages-base> [version]
+# TRUSTED-MACHINE TOOL, not a CI step.
+# It sources the local keyring env on purpose: the keyring package is the thing
+# the ROOT key signs, and the root secret never enters CI. A CI job must not
+# call this file - stage S signs the day-to-day source with a subkey only.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."                      # -> repo/
