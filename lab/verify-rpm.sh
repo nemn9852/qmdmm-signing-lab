@@ -16,16 +16,10 @@
 # accepted B too. It rejects it - which is what establishes the two-layer split
 # (metadata = per-repo keyring, package = global rpmdb).
 #
-# EXPECT_METADATA_REJECTED=1 says: on this rpm/dnf, metadata verification is
-# known not to work at all (fedora:43, rpm 6.0.2 / dnf5 5.2.18 - see
-# FINDINGS.md section 4). That inverts the A assertion, so a known-broken
-# toolchain does not leave a job red forever and train everyone to ignore it:
-#
-#   A rejected  -> PASS   (the known limitation, still exactly as documented)
-#   A accepted  -> FAIL   (the limitation is gone; drop the flag and let A and
-#                          B assert normally again)
-#
-# B is skipped under the flag: if A already cannot be verified, B proves nothing.
+# There used to be an EXPECT_METADATA_REJECTED escape hatch here, to invert A on
+# fedora:43 whose dnf5 5.2.18 cannot verify repomd at all. It is gone because
+# fedora:43 is gone: fedora 44 / 45 / rawhide all verify fine (see FINDINGS.md
+# section 4), so there is no known limitation left to work around.
 #
 # Also note: `dnf makecache` exits 0 even when the repomd signature fails to
 # verify. Never use its exit code as the assertion.
@@ -33,7 +27,6 @@ set -euo pipefail
 
 PAGES="${LAB_PAGES:?}"
 LINE="${LINE:?}"
-EXPECT_REJECTED="${EXPECT_METADATA_REJECTED:-0}"
 W=/w/verify-rpm
 
 echo "=== environment ==="
@@ -106,20 +99,8 @@ run_scenario() {
   echo "    exit=$rc  signature-error-in-output=$verr"
 
   if [ "$expect" = PASS ]; then
-    if [ "$EXPECT_REJECTED" = 1 ]; then
-      # inverted: this toolchain is documented as unable to verify metadata
-      if [ $verr -eq 1 ]; then
-        echo "    => KNOWN LIMITATION, still as documented (metadata rejected on this rpm/dnf)"
-      else
-        echo "    => FAIL (expected the documented rejection, but it verified!)"
-        echo "       The known fedora:43 limitation appears to be FIXED."
-        echo "       Drop EXPECT_METADATA_REJECTED for this line so A and B assert normally."
-        return 1
-      fi
-    else
-      if [ $rc -eq 0 ] && [ $verr -eq 0 ]; then echo "    => PASS"
-      else echo "    => FAIL (expected a clean pass, got rc=$rc verr=$verr)"; return 1; fi
-    fi
+    if [ $rc -eq 0 ] && [ $verr -eq 0 ]; then echo "    => PASS"
+    else echo "    => FAIL (expected a clean pass, got rc=$rc verr=$verr)"; return 1; fi
   else
     if [ $verr -eq 1 ]; then echo "    => REJECTED (dnf reported a signature error)"
     else echo "    => FAIL (expected a signature error, none reported - isolation is broken!)"; return 1; fi
@@ -133,21 +114,9 @@ echo "=============================================================="
 echo "  $LINE: repository-metadata signature (repo_gpgcheck)"
 echo "=============================================================="
 run_scenario "A. day-to-day source + packages key (root + subkey)" "$W/packages.gpg" PASS
-if [ "$EXPECT_REJECTED" = 1 ]; then
-  echo
-  echo "  B skipped: with metadata verification unusable on this rpm/dnf, the"
-  echo "  two-layer check (metadata=per-repo keyring vs package=global rpmdb)"
-  echo "  cannot be concluded here. It is asserted on the EL lines."
-else
-  run_scenario "B. day-to-day source + root key (primary only)"    "$W/root.gpg"     FAIL
-fi
+run_scenario "B. day-to-day source + root key (primary only)"      "$W/root.gpg"     FAIL
 
 echo
 echo "=============================================================="
-if [ "$EXPECT_REJECTED" = 1 ]; then
-  echo "  passed: metadata verification still fails exactly as documented"
-  echo "  (rpm 6 / dnf5 on fedora:43 - FINDINGS.md section 4.1)"
-else
-  echo "  passed: only this line's subkey can sign this repo's metadata"
-fi
+echo "  passed: only this line's subkey can sign this repo's metadata"
 echo "=============================================================="

@@ -223,11 +223,11 @@ Consequences for the real scheme:
 
 - **Do not collapse the rpm lines.** "One representative distro is enough"
   held for deb and pacman in this run; it does not hold here.
-- **fedora 43+ needs its own answer**, and that answer is not a different key
-  type (§4.1). The pragmatic one: do not rely on `repo_gpgcheck` there; sign
-  packages and let `gpgcheck` do the work.
-- EL10 (rpm 4.19 / dnf4) behaves exactly as the design wants: per-repo metadata
-  signing works, and only the key named in `gpgkey=` may sign it.
+- **Only fedora:43 is affected**, and only because of the dnf5 it ships (§4.2).
+  Everything from 44 on behaves exactly as the design wants, so no key or
+  layout decision changed.
+- EL10 (rpm 4.19 / dnf4) behaves exactly as the design wants too: per-repo
+  metadata signing works, and only the key named in `gpgkey=` may sign it.
 
 ### 4.1 The package-level path works on fedora:43 — and ed25519 is fine
 
@@ -258,43 +258,37 @@ Two things follow:
 So the fedora failure is confined to repository-metadata verification on
 rpm 6 / dnf5, and it is not a reason to change key material.
 
-### 4.2 How CI handles it: invert the assertion, do not accept a red job
+### 4.2 It is a fedora:43 defect, not the new normal
 
-`verify-rpm (fedora)` used to be red on every run. A job that is red by design
-is worse than no job: it teaches everyone to read a red suite as normal, which
-is how the next real regression gets missed. So the assertion is inverted
-instead, scoped to that one line via `EXPECT_METADATA_REJECTED=1`:
+Same probe, four fedora generations, three key shapes each:
 
-| scenario A outcome | result |
-|---|---|
-| metadata rejected | **PASS** — reported as the known limitation |
-| metadata verified | **FAIL**, and the message says the limitation is gone and the flag should be dropped |
+| image | rpm | dnf5 | subkey signs | primary signs | no subkey, primary signs |
+|---|---|---|---|---|---|
+| `fedora:43` | 6.0.2 | **5.2.18** | rejected | rejected | rejected |
+| `fedora:44` | 6.0.2 | **5.4.3.0** | accepted | accepted | accepted |
+| `fedora:45` | 6.1.0 | 5.4.3.0 | accepted | accepted | accepted |
+| `fedora:rawhide` | 6.1.0 | 5.4.3.0 | accepted | accepted | accepted |
 
-Scenario B (root-only key must be rejected) is skipped under the flag, with the
-reason printed: if A cannot be verified at all on this rpm/dnf, B says nothing
-about the two-layer split. It remains asserted on both EL lines, where it does.
+fedora:44 carries the **same rpm 6.0.2** as 43 and works, so the component that
+moved is **dnf5** (5.2.18 → 5.4.3.0). The defect is in that dnf5 release, and it
+is fixed in the next one. It is not a new requirement, and it is not about key
+material — which is why nothing about the key design changed.
 
-So the suite is green and still honest, and the day fedora fixes this the run
-goes red for a reason worth acting on.
+Consequences, in order of how much they matter:
 
-**And the inversion is proven to have teeth**, because a flag that makes a job
-green is one careless change away from being a flag that makes it green *no
-matter what*. `lab/probe-inversion-control.sh` takes the same script with the
-same flag and runs it on rocky:10, where metadata verification does work. It
-must exit non-zero — and the control also checks *why*, since a run that dies
-earlier (a failed fetch, `wait_for_publish` timing out) would exit non-zero too
-and prove nothing:
-
-```
---- A. ... (key=packages.gpg, expect PASS)
-    exit=0  signature-error-in-output=0
-    => FAIL (expected the documented rejection, but it verified!)
-       The known fedora:43 limitation appears to be FIXED.
-       Drop EXPECT_METADATA_REJECTED for this line so A and B assert normally.
-verify-rpm.sh exit = 1
-OK: it failed, and for the documented reason (the limitation is absent here)
-=> the inversion discriminates: green means 'still broken', red means 'fixed'
-```
+- **fedora:43 is dropped from this lab**, and the fedora line runs `fedora:44`
+  (the tag issue #24 already identifies with `fedora:latest`). With no known
+  limitation left, the inverted assertion, its positive-control probe and
+  `verify-rpm.sh`'s escape hatch were all removed rather than left as dead code.
+- **Issue #24 should not carry a fedora:43 row without a note.** As listed it
+  would fail `repo_gpgcheck` on that container. Two honest options: drop 43, or
+  keep it and fall back to package-level `gpgcheck` there.
+- **A caveat that keeps this from being "43 is broken":** the failure is a
+  property of the dnf5 version, and dnf5 is updated inside a released Fedora.
+  A Fedora 43 user who has taken updates may well have a working dnf5; the
+  container image is not the same thing as an updated install. Worth a probe if
+  a 43 line ever matters again — DNF5's version is the thing to compare, not the
+  release number.
 
 ## 5. Two-layer rpm keyring, confirmed
 

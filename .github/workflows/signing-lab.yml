@@ -64,7 +64,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { line: fedora, image: "fedora:43",     env: fedora }
+          - { line: fedora, image: "fedora:44",     env: fedora }
           - { line: rocky,  image: "rockylinux/rockylinux:10", env: rocky  }
           - { line: alma,   image: "almalinux:10",  env: alma   }
     environment: ${{ matrix.env }}
@@ -215,12 +215,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # fedora:43 is rpm 6.0.2 / dnf5 5.2.18, which rejects repomd.xml signed
-          # by any gpg key (all six shapes probed - see FINDINGS.md 4.1). The
-          # assertion is inverted there so the job does not stay red and train
-          # everyone to ignore it: a later FAILURE means the limitation is gone
-          # and the flag should be dropped.
-          - { line: fedora, image: "fedora:43",                expect_metadata_rejected: "1" }
+          # fedora:43 is deliberately absent: its shipped dnf5 5.2.18 cannot
+          # verify a repomd.xml signed by any gpg key (all six shapes probed,
+          # FINDINGS.md 4.1), while 44 / 45 / rawhide all can - so it is a dnf5
+          # version defect, not the new normal. 44 is the tag the packaging work
+          # already targets (issue #24: same as fedora:latest).
+          - { line: fedora, image: "fedora:44" }
           - { line: rocky,  image: "rockylinux/rockylinux:10" }
           - { line: alma,   image: "almalinux:10"  }
     steps:
@@ -242,7 +242,6 @@ jobs:
             -e LAB_PAGES="$LAB_PAGES" -e ROOT_FPR="$ROOT_FPR" \
             -e EXPECT_SHA="${{ github.sha }}" \
             -e LINE="${{ matrix.line }}" \
-            -e EXPECT_METADATA_REJECTED="${{ matrix.expect_metadata_rejected || '0' }}" \
             "${{ matrix.image }}" bash /w/lab/verify-rpm.sh
 
   verify-arch:
@@ -363,24 +362,6 @@ jobs:
             -e LINE="${{ matrix.line }}" -e ALGO="${{ matrix.algo }}" \
             "${{ matrix.image }}" bash /w/lab/probe-rpm-pkgcheck.sh
 
-  # Positive control for the one inverted assertion: run verify-rpm.sh with the
-  # flag set against a distro where metadata verification DOES work. It must go
-  # red, and for the documented reason - otherwise the flag is a blanket green.
-  probe-inversion-control:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    needs: [publish]
-    steps:
-      - uses: actions/checkout@v7
-      - name: Prove the inverted assertion can fail
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e LAB_PAGES="$LAB_PAGES" \
-            -e EXPECT_SHA="${{ github.sha }}" \
-            rockylinux/rockylinux:10 bash /w/lab/probe-inversion-control.sh
-
   # Is the fedora:43 repomd rejection a 43-only bug, or the shape of things to
   # come? Same probe, four fedora generations, so the answer is a version table
   # rather than a guess. A tag that does not exist fails with 'manifest unknown',
@@ -402,25 +383,18 @@ jobs:
             -e LINE="${{ matrix.image }}" -e ALGO=ed25519 \
             "${{ matrix.image }}" bash /w/lab/probe-rpm-verify.sh
 
-  # Companion to probe-fedora-versions: is the rejection about the toolchain, or
-  # about the lab handing dnf a file:// key where a real consumer writes a URL?
-  probe-rpm-https-key:
+  # The rejection tracks dnf5 5.2.18 (fedora:44 has the same rpm 6.0.2 and works,
+  # with dnf5 5.4.3.0). dnf5 is not frozen inside a released Fedora, so this asks
+  # whether the limitation belongs to the release or to the shipped package:
+  # upgrade dnf5 inside fedora:43 and re-run the same three shapes.
+  probe-fedora43-dnf5-upgrade:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    needs: [publish]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { line: fedora, image: "fedora:43" }
-          - { line: rocky,  image: "rockylinux/rockylinux:10" }
     steps:
       - uses: actions/checkout@v7
-      - name: Probe key source on ${{ matrix.image }}
+      - name: Retest fedora:43 with an updated dnf5
         run: |
           set -euo pipefail
           docker run --rm \
             -v "$PWD:/w" -w /w \
-            -e LAB_PAGES="$LAB_PAGES" -e EXPECT_SHA="${{ github.sha }}" \
-            -e LINE="${{ matrix.line }}" \
-            "${{ matrix.image }}" bash /w/lab/probe-rpm-https-key.sh
+            fedora:43 bash /w/lab/probe-fedora43-dnf5-upgrade.sh

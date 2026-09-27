@@ -60,12 +60,11 @@ The verify jobs are the interesting half: not declaring an `environment:` means
 `${{ secrets.* }}` expands to empty, so they see nothing but what Pages
 publishes.
 
-One assertion is deliberately inverted. `verify-rpm` on `fedora:43` carries
-`EXPECT_METADATA_REJECTED=1`, because rpm 6.0.2 / dnf5 5.2.18 cannot verify
-`repomd.xml` signed by a gpg key at all (all six key shapes probed — FINDINGS.md
-§4.1). With the flag, a *rejection* passes and a *success* fails, so the job is
-green while the limitation stands and turns red the day fedora fixes it. Scenario
-B is skipped there for the same reason.
+There is no inverted assertion here, and no skipped scenario. `fedora:43` is
+simply not part of this lab: its shipped dnf5 5.2.18 cannot verify a `repomd.xml`
+signed by any gpg key, while fedora 44 / 45 / rawhide all can (FINDINGS.md §4).
+That is a dnf5 version defect, so the fix was to stop testing on 43 — the fedora
+line runs on `fedora:44`, the tag the packaging work already targets.
 
 ## Running it
 
