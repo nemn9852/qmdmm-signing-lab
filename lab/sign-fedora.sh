@@ -50,38 +50,17 @@ fi
 echo "  OK: gpg refuses to sign with the primary key"
 
 echo
-echo "=== build a throwaway rpm ==="
-TOP=/tmp/rpmbuild
-mkdir -p "$TOP/BUILD" "$TOP/RPMS" "$TOP/SOURCES" "$TOP/SPECS" "$TOP/SRPMS"
-cat > "$TOP/SPECS/lab.spec" <<'SPEC'
-Name:           qmdmm-lab
-Version:        1.0
-Release:        1
-Summary:        QMdmm signing lab test package
-License:        MIT
-BuildArch:      noarch
-
-%description
-Disposable test package for the QMdmm signing lab.
-
-%prep
-%build
-%install
-mkdir -p %{buildroot}/usr/share/qmdmm-lab
-printf 'lab\n' > %{buildroot}/usr/share/qmdmm-lab/README
-
-%files
-/usr/share/qmdmm-lab/README
-
-%changelog
-* Sun Sep 27 2026 Lab <lab@example.invalid> - 1.0-1
-- initial
-SPEC
-if ! rpmbuild -bb --define "_topdir $TOP" "$TOP/SPECS/lab.spec" > /tmp/rpmbuild.log 2>&1; then
-  echo "  !! rpmbuild failed"; tail -25 /tmp/rpmbuild.log | sed 's/^/    /'; exit 1
-fi
-RPM=$(find "$TOP/RPMS" -name '*.rpm' | head -1)
+echo "=== fetch a real, throwaway rpm to sign ==="
+# rpmbuild on a trivial spec trips over Fedora's check-buildroot here, and the
+# lab does not need a package we built ourselves - signing a real one that dnf
+# just fetched is a better match for what the pipeline actually does.
+dnf install -y -q dnf-plugins-core </dev/null || true
+rm -rf /tmp/rpms; mkdir -p /tmp/rpms
+dnf download --destdir /tmp/rpms tree </dev/null
+RPM=$(ls /tmp/rpms/*.rpm | head -1)
 echo "  $RPM"
+rpm -qp --qf '  before signing: %{NAME}-%{VERSION}-%{RELEASE}  sig=%{SIGPGP:pgpsig}\n' "$RPM" 2>/dev/null \
+  || echo "  before signing: (no signature field)"
 
 echo
 echo "=== sign the rpm with this line's subkey (package-level signature) ==="
