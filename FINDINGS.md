@@ -413,3 +413,29 @@ Also worth keeping: on `archlinux:base` the mirrorlist is entirely commented out
 so the refresh step has no server until one is written. The harness's
 `base-image-pac.sh` already pins `geo.mirror.pkgbuild.com`, which is why this
 only bit the lab's own probes.
+
+## 9. Two axes, not one: package format and the program that reads it
+
+The matrix in issue #24 says **`rpm+dnf`**, and that is not a redundant label - it
+names two different things, and the pipeline is split along the same line:
+
+| axis | what it decides | where it lives |
+|---|---|---|
+| **format** | how a package and its repository metadata are laid out and signed: `deb`, `rpm`, `pacman`, `apk` | stage A (`pack-<fmt>.sh`) and stage S (signed repository) |
+| **consumer** | which program reads that repository and what it does when a signature is wrong: `apt`, `dnf`, `zypper`, `pacman`, `apk` | stage B/C (verification) |
+
+Consequences, which is why this is written down before the stages exist:
+
+- **Stage A and stage S are format-level.** `ci/pack-rpm.sh` and a signed
+  `repodata/` know nothing about dnf, and the same signed repodata serves any rpm
+  consumer.
+- **Stage B/C is consumer-level.** `lab/verify-rpm-dnf.sh` is named for dnf and
+  not for rpm, because that is the half that would differ.
+- **A new consumer is a new verification script, not new packaging or signing.**
+  `openSUSE` + `zypper` is the case that will exercise this: same rpm format,
+  same signed repodata, different reader. `lab/lines.tsv` therefore carries a
+  `consumer` column next to `fmt`, so that row is data plus one script.
+- **Do not let a consumer's quirk become a format's fact.** The one that has
+  already bitten: `dnf makecache` exits **0** even when repomd verification
+  fails. That is a dnf behaviour, and it stays labelled as one - a zypper script
+  must not inherit it as an assumption.

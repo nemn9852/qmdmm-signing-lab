@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 #
+# The **dnf** consumer of an rpm repository.
+#
+# Named by consumer on purpose. rpm is the package format; dnf is one of the
+# programs that reads it, and the matrix says "rpm+dnf" for exactly that reason.
+# The repository stage produces signed repodata at format level, and the same
+# artifact serves any rpm consumer - a later openSUSE row would reuse it as-is
+# and need a zypper script here, not a second signing path. That is also why
+# nothing below is allowed to state an rpm-shaped fact that is really a dnf
+# behaviour: `dnf makecache` exiting 0 on a failed signature check is a dnf fact
+# (see the assertion), not a property of rpm repositories.
+#
 # Consumer-side check, run inside a clean dnf-based container (fedora / rocky /
 # alma all use this script). Public keys come from Pages only - this job holds
 # no secret at all.
