@@ -491,9 +491,15 @@ jobs:
           - { line: arch, fmt: pac, version: rolling, image: "archlinux:base", expect: "-6" }
           - { line: manjaro, fmt: pac, version: rolling, image: "manjarolinux/base:latest", expect: "-6" }
     steps:
+      # The harness, fetched without needing git *inside* the container - these
+      # images do not ship git, and stage A is what installs it. actions/checkout
+      # downloads a tarball over the REST API instead of cloning, so it works
+      # before any package has been installed. (A `git clone` here failed with
+      # "git: not found" on every row.)
       - uses: actions/checkout@v7
-      - name: Clone the packaging harness
-        run: git clone --depth 1 https://github.com/QMdmm/QMdmmPackagingCi.git harness
+        with:
+          repository: QMdmm/QMdmmPackagingCi
+          path: harness
       - name: Pack with the harness
         working-directory: harness
         env:
