@@ -135,7 +135,7 @@ check
 echo
 echo "=== verdict ==="
 if [ -z "${MISSING// /}" ]; then
-  echo "  usable, but only after enabling CRB + EPEL."
+  echo "  usable, but only after enabling CRB."
   echo "  base-image-rpm.sh does not do this - finding for the harness."
   exit 0
 fi

@@ -357,3 +357,59 @@ Every sign container should keep asserting, as this lab does:
 And every consumer-side check should assert on the verifier's *message*, not
 its exit code, until you have confirmed which verifier is in play — per §3.1 the
 two common ones disagree.
+
+## 8. The 12-row matrix: what each distro version can actually build
+
+The lab is being moved off its stand-ins and onto the real pipeline: stage A is
+the harness's own `ci/pack-<fmt>.sh`, cloned from `QMdmm/QMdmmPackagingCI` at run
+time. `lab/lines.tsv` is issue #24 as data - **12 container rows across 7 signing
+lines**:
+
+| line | fmt | versions | containers |
+|---|---|---|---|
+| debian | deb | trixie, forky, sid | `debian:trixie`, `debian:forky`, `debian:sid` |
+| ubuntu | deb | resolute, stonking | `ubuntu:resolute`, `ubuntu:stonking` |
+| fedora | rpm | 44, 45, rawhide | `fedora:44`, `fedora:45`, `fedora:rawhide` |
+| rocky | rpm | 10 | `rockylinux/rockylinux:10` |
+| alma | rpm | 10 | `almalinux:10` |
+| arch | pac | rolling | `archlinux:base` |
+| manjaro | pac | rolling | `manjarolinux/base:latest` |
+
+Before building on that, one question: can each row install the Qt 6 toolchain
+stage A needs? Three of the images are *unreleased* distributions, and a
+12-row build is an expensive way to find out. `probe-toolchain.sh` reads the
+package list **out of the harness's own `pack-<fmt>.sh`** rather than copying it,
+so it cannot drift from what stage A will ask for.
+
+**Result: all 12 rows are usable — but one of them needs a repository that
+`base-image-rpm.sh` does not enable.** The first pass found 11 of 12 clean; the
+one failure was `rockylinux/rockylinux:10`, and it is not "Rocky cannot build
+QMdmm":
+
+```
+--- 1. as shipped (what stage A gets today) ---
+    MISSING  ninja-build
+    ok       qt6-qtbase-devel      (6.10.1-1.el10, appstream)
+    MISSING  doxygen
+
+--- 2. with CRB + EPEL enabled (EL rows) ---
+      enabled crb
+      ninja-build   available: 1.11.1-9.el10   (crb)
+      doxygen       available: 2:1.13.2-1.el10 (crb)
+```
+
+`almalinux:10` satisfies the identical list as shipped, so the two EL rows are
+**not interchangeable**, and the difference is not package naming: `ninja-build`
+and `doxygen` live in **CRB**, which Rocky's image leaves disabled. (Both came
+from CRB here; EPEL is enabled too and reported, but it is not what supplies
+either package.)
+
+The probe therefore answers the two questions in order and prints both. Reporting
+only the first would have written off a row that works; reporting only the second
+would have hidden that **`base-image-rpm.sh` does not enable CRB** - which is the
+finding the harness needs, not the lab.
+
+Also worth keeping: on `archlinux:base` the mirrorlist is entirely commented out,
+so the refresh step has no server until one is written. The harness's
+`base-image-pac.sh` already pins `geo.mirror.pkgbuild.com`, which is why this
+only bit the lab's own probes.

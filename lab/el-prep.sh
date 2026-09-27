@@ -9,7 +9,15 @@
 # for Rocky is not a different package name - it is two extra repositories.
 #
 #   ninja-build  lives in CRB (CodeReady Builder), disabled by default
-#   doxygen      comes from EPEL
+#   doxygen      also came from CRB in the measurement below - EPEL is tried
+#                too, but it is not what supplies either package here:
+#
+#     ninja-build   available: 1.11.1-9.el10   (crb)
+#     doxygen       available: 2:1.13.2-1.el10 (crb)
+#
+# So the load-bearing change for Rocky is enabling CRB; EPEL is enabled as well
+# (and reported) because a different EL rebuild may route it differently, but the
+# evidence says CRB is the one that matters.
 #
 # So this enables CRB and EPEL, reports what changed, and re-answers the same
 # question the probe asks. Fedora does not need it: everything is in the base
