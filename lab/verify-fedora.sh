@@ -10,9 +10,13 @@
 #   A. day-to-day source + packages key (root + this line's subkey) -> must PASS
 #   B. day-to-day source + root key (primary only)                  -> must FAIL
 #
-# Package-level gpgcheck (the rpm inside) is a different story: it goes through
-# the *global rpmdb*, so that key has to be `rpm --import`ed. Kept out of the
-# assertions here on purpose.
+# B is the sharper half: the subkey is imported into the *global* rpmdb before
+# both scenarios run, so if dnf consulted the rpmdb for metadata it would have
+# accepted B too. It rejects it - which is what establishes the two-layer split
+# (metadata = per-repo keyring, package = global rpmdb).
+#
+# Also note: `dnf makecache` exits 0 even when the repomd signature fails to
+# verify. Never use its exit code as the assertion.
 set -euo pipefail
 
 PAGES="${LAB_PAGES:?}"
@@ -62,7 +66,7 @@ EOF
 }
 
 run_scenario() {
-  local name="$1" keyfile="$2" expect="$3" d out rc
+  local name="$1" keyfile="$2" expect="$3" d out rc verr
   d=$(mk_repo "$(basename "$keyfile" .gpg)" "$keyfile")
   printf '\n--- %s (key=%s, expect %s)\n' "$name" "$(basename "$keyfile")" "$expect"
   rm -rf /var/cache/dnf /tmp/dnfcache
@@ -71,13 +75,21 @@ run_scenario() {
              --setopt=cachedir=/tmp/dnfcache makecache 2>&1)
   rc=$?
   set -e
-  echo "$out" | grep -iE 'signature|gpg|error|fail|metadata|repo' | head -8 | sed 's/^/    /' || true
+  echo "$out" | grep -iE 'signature|gpg|error|fail|metadata cache|repo' | head -8 | sed 's/^/    /' || true
+
+  # IMPORTANT: `dnf makecache` still exits 0 when the repomd signature fails to
+  # verify - it only prints ">>> repomd.xml GPG signature verification error".
+  # So the exit code is NOT a usable assertion here; look for the message.
+  verr=0
+  echo "$out" | grep -qi 'signature verification error' && verr=1
+  echo "    exit=$rc  signature-error-in-output=$verr"
+
   if [ "$expect" = PASS ]; then
-    if [ $rc -eq 0 ]; then echo "    => PASS"
-    else echo "    => FAIL (expected PASS, got rc=$rc)"; return 1; fi
+    if [ $rc -eq 0 ] && [ $verr -eq 0 ]; then echo "    => PASS"
+    else echo "    => FAIL (expected a clean pass, got rc=$rc verr=$verr)"; return 1; fi
   else
-    if [ $rc -ne 0 ]; then echo "    => REJECTED (rc=$rc)"
-    else echo "    => FAIL (expected rejection, but it was accepted - isolation is broken!)"; return 1; fi
+    if [ $verr -eq 1 ]; then echo "    => REJECTED (dnf reported a signature error)"
+    else echo "    => FAIL (expected a signature error, none reported - isolation is broken!)"; return 1; fi
   fi
   echo "    (per-repo keyring dnf created for this repo:)"
   find /tmp/dnfcache -maxdepth 2 -name 'pubring*' 2>/dev/null | sed 's/^/      /' || true
