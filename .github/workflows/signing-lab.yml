@@ -362,3 +362,21 @@ jobs:
             -v "$PWD:/w" -w /w \
             -e LINE="${{ matrix.line }}" -e ALGO="${{ matrix.algo }}" \
             "${{ matrix.image }}" bash /w/lab/probe-rpm-pkgcheck.sh
+
+  # Positive control for the one inverted assertion: run verify-rpm.sh with the
+  # flag set against a distro where metadata verification DOES work. It must go
+  # red, and for the documented reason - otherwise the flag is a blanket green.
+  probe-inversion-control:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: [publish]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prove the inverted assertion can fail
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/w" -w /w \
+            -e LAB_PAGES="$LAB_PAGES" \
+            -e EXPECT_SHA="${{ github.sha }}" \
+            rockylinux/rockylinux:10 bash /w/lab/probe-inversion-control.sh
