@@ -277,6 +277,25 @@ about the two-layer split. It remains asserted on both EL lines, where it does.
 So the suite is green and still honest, and the day fedora fixes this the run
 goes red for a reason worth acting on.
 
+**And the inversion is proven to have teeth**, because a flag that makes a job
+green is one careless change away from being a flag that makes it green *no
+matter what*. `lab/probe-inversion-control.sh` takes the same script with the
+same flag and runs it on rocky:10, where metadata verification does work. It
+must exit non-zero — and the control also checks *why*, since a run that dies
+earlier (a failed fetch, `wait_for_publish` timing out) would exit non-zero too
+and prove nothing:
+
+```
+--- A. ... (key=packages.gpg, expect PASS)
+    exit=0  signature-error-in-output=0
+    => FAIL (expected the documented rejection, but it verified!)
+       The known fedora:43 limitation appears to be FIXED.
+       Drop EXPECT_METADATA_REJECTED for this line so A and B assert normally.
+verify-rpm.sh exit = 1
+OK: it failed, and for the documented reason (the limitation is absent here)
+=> the inversion discriminates: green means 'still broken', red means 'fixed'
+```
+
 ## 5. Two-layer rpm keyring, confirmed
 
 `dnf`'s `repo_gpgcheck` verifies `repomd.xml` against a **per-repository**
