@@ -38,14 +38,20 @@ jobs:
     environment: debian                     # <- only this makes SIGNING_KEY visible
     steps:
       - uses: actions/checkout@v4
+      - name: Probe whether stdin can be piped into a container here
+        run: |
+          set -euo pipefail
+          printf 'probe-payload\n' | docker run --rm -i debian:sid \
+            bash -c 'IFS= read -r X || true; echo "container received: [$X]"'
       - name: Sign the day-to-day source inside debian:sid
         env:
           SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
         run: |
           set -euo pipefail
           mkdir -p out/debian
-          printf '%s\n' "$SIGNING_KEY_B64" | docker run --rm -i \
+          docker run --rm \
             -v "$PWD:/w" -w /w \
+            -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
             -e SUB_FPR="$SUB_DEBIAN" \
             debian:sid bash /w/lab/sign-debian.sh
           sudo chmod -R a+rX out
@@ -66,8 +72,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out/fedora
-          printf '%s\n' "$SIGNING_KEY_B64" | docker run --rm -i \
+          docker run --rm \
             -v "$PWD:/w" -w /w \
+            -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
             -e SUB_FPR="$SUB_FEDORA" \
             fedora:latest bash /w/lab/sign-fedora.sh
           sudo chmod -R a+rX out
@@ -88,8 +95,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out/arch
-          printf '%s\n' "$SIGNING_KEY_B64" | docker run --rm -i \
+          docker run --rm \
             -v "$PWD:/w" -w /w \
+            -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
             -e SUB_FPR="$SUB_ARCH" \
             archlinux:base bash /w/lab/sign-arch.sh
           sudo chmod -R a+rX out

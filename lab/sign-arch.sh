@@ -9,8 +9,14 @@
 #           OUT     = output dir inside the container (default /w/out/arch)
 set -euo pipefail
 
-# Read the secret off stdin FIRST: pacman below consumes stdin.
-IFS= read -r KEY_B64 || true
+# The secret arrives either as $SIGNING_KEY_B64, or on stdin as a single
+# base64 line. In GitHub Actions the stdin route never reaches the container,
+# so the env route is the one used there.
+KEY_B64="${SIGNING_KEY_B64:-}"
+if [ -z "$KEY_B64" ]; then
+  # Read stdin FIRST - pacman below consumes it.
+  IFS= read -r KEY_B64 || true
+fi
 
 SUB_FPR="${SUB_FPR:?}"
 OUT="${OUT:-/w/out/arch}"
