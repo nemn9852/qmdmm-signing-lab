@@ -166,14 +166,25 @@ What fedora prints while trying is the useful part, and so is what it does not:
 
 ```
 >>> repomd.xml GPG signature verification error: Signing key not found
-Importing OpenPGP key 0x64947284:
-    keyring: /tmp/keyimport/cache-binary-gpgkey/lab-1418142b151577d0/pubring (0B)
-rpmdb keys: gpg-pubkey-c6e7f081cf80e13146676e88829b606631645531-66b6dccf
+Importing OpenPGP key 0x2C2B3684:
+    keyring: /tmp/keyimport/cache-binary-gpgkey/lab-.../pubring
+      E9B30B832C2B3684.pub   2825 bytes
 ```
 
-dnf5 creates its per-repo keyring and then imports **nothing** into it — 0 bytes
-— while announcing an import. That is the failure, and `Signing key not found`
-is the honest consequence.
+**The import succeeds and verification fails anyway.** dnf5 writes a real,
+2825-byte public key file named after the keyid into its per-repo keyring, and
+then reports `Signing key not found` for metadata signed by that very key.
+
+**Correction (second revision of this paragraph).** An earlier attempt at this
+said the keyring was left empty ("0 bytes"), based on a `wc -c` that was being
+handed a *directory* and on trying to read that directory as a gpg homedir. The
+directory does contain the key. The import side of dnf5 is working; whatever is
+broken is on the verification side.
+
+**Also retracted:** `rpm --import` "failed on both distros" was my probe's
+error, not a finding. rpm wants armored input and was handed the binary export
+(`error: /tmp/keyimport/pub.gpg: key 1 not an armored public key`). It is not
+evidence about EdDSA or about rpm's parser.
 
 **Correction (this document previously claimed something false here).** An
 earlier revision said "the same key is reported under a different keyid by the
@@ -181,7 +192,8 @@ two systems" — fedora `0x64947284` vs rocky `0xE762F939` — and inferred an
 OpenPGP v6-vs-v4 keyid mismatch from it. That was wrong: this probe generates a
 **throwaway key inside each container**, so fedora and rocky necessarily work on
 different keys. The two fingerprints were read back and they are, indeed, that
-probe's own keys:
+run's own keys (note: a *later* run gives fedora `0x2C2B3684`, a third key —
+the number is never comparable across runs, which is the whole point):
 
 ```
 fedora:43  root = 9E84FC1D5CC3AB463F9B0DFFE7C5A6AF64947284   -> "0x64947284"
