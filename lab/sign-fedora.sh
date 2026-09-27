@@ -34,7 +34,6 @@ echo "=== dependencies ==="
 # rpmsign lives in rpm-sign, not in rpm-build (and createrepo_c does not sign
 # anything by itself - the metadata signature is a plain gpg --detach-sign).
 dnf install -y -q gnupg2 rpm-sign createrepo_c zstd </dev/null
-
 echo
 echo "=== import subkey from stdin ==="
 printf '%s\n' "$KEY_B64" | base64 -d | gpg --batch --import 2>&1 | sed 's/^/  /'
@@ -70,11 +69,13 @@ rpm -qp --qf '  before signing: %{NAME}-%{VERSION}-%{RELEASE}  sig=%{SIGPGP:pgps
 echo
 echo "=== sign the rpm with this line's subkey (package-level signature) ==="
 echo "  rpm default OpenPGP backend: $(rpm --eval '%_openpgp_sign' 2>/dev/null || echo '<unset>')"
+# A fetched package already carries the distro's own (legacy) signature and rpm
+# refuses to stack a second one on top, so strip it first.
+rpmsign --delsign "$RPM" 2>&1 | sed 's/^/  /' || true
 if ! rpmsign --addsign \
       --define "_gpg_name ${SUB_FPR}" \
-      --define "_openpgp_sign gpg" \
       "$RPM" 2>&1 | sed 's/^/  /'; then
-  echo "  !! rpmsign with the gpg backend failed"; exit 1
+  echo "  !! rpmsign failed"; exit 1
 fi
 rpm -qp --qf '  signed: %{NAME}-%{VERSION}-%{RELEASE}  sig=%{SIGPGP:pgpsig}\n' "$RPM" 2>/dev/null || true
 
