@@ -1,0 +1,25 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: QMdmm Signing Lab
+Label: QMdmm Signing Lab
+Suite: stable
+Codename: stable
+Date: Sun, 27 Sep 2026 01:36:13 UTC
+Architectures: all
+Components: main
+Description: QMdmm signing lab — keyring source (root-signed)
+MD5Sum:
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-all/Packages
+ 94959098e0a05b2380616b0eb01f5c10               29 main/binary-all/Packages.gz
+SHA256:
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-all/Packages
+ 4ecf233bb4021c8c7fae048ee2451a0c267821ace4a79d7472803c85890a1aa5               29 main/binary-all/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iJEEARYKADkWIQTbBeXZAnE5pJPnyd3NKQ3aKug9OAUCarhzDRsUgAAAAAAEAA5t
+YW51MiwyLjUrMS4xMiwwLDMACgkQzSkN2iroPTjL6wEAkSrtKHW+VwEj4cZUWCrS
+r1sixoVjHLSHb76pDkf0joYBAI9Hvk86433+tm3TvSO0u8KReOJukOnK29aBwRlt
+YC8N
+=KdqD
+-----END PGP SIGNATURE-----

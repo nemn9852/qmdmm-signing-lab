@@ -1,0 +1,211 @@
+name: signing-lab
+
+# 一次性演练：把「root key 签 keyring 源 + 每发行版子钥签日常源 + 消费者侧验签」
+# 整条链在真容器里跑通。设计见设计文档 §9。
+#
+# 分工：
+#   sign-*    : 声明 environment ⇒ 拿得到该线的子钥 secret；在对应发行版容器里签
+#   publish    : 把 keys/ + 本机签好的 keyring 源 + CI 产出的日常源一起发上 Pages
+#   verify-*  : 不声明 environment ⇒ 拿不到任何 secret；公钥从 Pages 取（= 消费者处境）
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+env:
+  ROOT_FPR: DB05E5D9027139A493E7C9DDCD290DDA2AE83D38
+  SUB_DEBIAN: 22F94DB1069D1F24505CB5675779CAB6443DA554
+  SUB_FEDORA: 0CB6055FE24FCC8BEEFB6D99808EB86A8399B375
+  SUB_ARCH: 1D569E0B4281AA59A13217B0B7681D0609159052
+  LAB_PAGES: https://nemn9852.github.io/qmdmm-signing-lab
+
+jobs:
+
+  # ================= 签名侧：每发行版一个容器 =================
+
+  sign-debian:
+    runs-on: ubuntu-latest
+    environment: debian                      # ← 声明了才拿得到 SIGNING_KEY
+    steps:
+      - uses: actions/checkout@v4
+      - name: 在 debian:sid 里签日常源
+        env:
+          SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p out/debian
+          printf '%s' "$SIGNING_KEY_B64" | docker run --rm -i \
+            -v "$PWD:/w" -w /w \
+            -e SUB_FPR="$SUB_DEBIAN" \
+            debian:sid bash /w/lab/sign-debian.sh
+          sudo chmod -R a+rX out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repo-debian
+          path: out/debian
+          if-no-files-found: error
+
+  sign-fedora:
+    runs-on: ubuntu-latest
+    environment: fedora
+    steps:
+      - uses: actions/checkout@v4
+      - name: 在 fedora:latest 里签日常源
+        env:
+          SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p out/fedora
+          printf '%s' "$SIGNING_KEY_B64" | docker run --rm -i \
+            -v "$PWD:/w" -w /w \
+            -e SUB_FPR="$SUB_FEDORA" \
+            fedora:latest bash /w/lab/sign-fedora.sh
+          sudo chmod -R a+rX out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repo-fedora
+          path: out/fedora
+          if-no-files-found: error
+
+  sign-arch:
+    runs-on: ubuntu-latest
+    environment: arch
+    steps:
+      - uses: actions/checkout@v4
+      - name: 在 archlinux:base 里签日常源
+        env:
+          SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p out/arch
+          printf '%s' "$SIGNING_KEY_B64" | docker run --rm -i \
+            -v "$PWD:/w" -w /w \
+            -e SUB_FPR="$SUB_ARCH" \
+            archlinux:base bash /w/lab/sign-arch.sh
+          sudo chmod -R a+rX out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repo-arch
+          path: out/arch
+          if-no-files-found: error
+
+  # ================= 发布侧：公钥 + 两个源都上 Pages =================
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [sign-debian, sign-fedora, sign-arch]
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: 组装站点
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp -r keys  _site/keys
+          cp -r repo  _site/repo
+          for d in debian fedora arch; do
+            if [ -d "artifacts/repo-$d" ]; then
+              rm -rf "_site/repo/$d/daily"
+              cp -r "artifacts/repo-$d" "_site/repo/$d/daily"
+            fi
+          done
+          {
+            echo '<!doctype html><meta charset="utf-8">'
+            echo '<title>QMdmm signing lab</title>'
+            echo '<h1>QMdmm signing lab</h1>'
+            echo '<p>A disposable end-to-end test of the QMdmm distro signing scheme.'
+            echo 'These keys are test keys and are revoked when the lab ends.</p>'
+            echo '<h2>Fingerprints</h2><pre>'
+            cat keys/fingerprints.txt | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g'
+            echo '</pre><h2>Tree</h2><pre>'
+            (cd _site && find . -type f | sort | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g')
+            echo '</pre>'
+          } > _site/index.html
+          echo "--- 站点内容 ---"
+          (cd _site && find . -type f | sort)
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  # ================= 消费者侧：空容器，拿不到任何 secret =================
+
+  verify-debian:
+    runs-on: ubuntu-latest
+    needs: [publish]                          # ← 故意不声明 environment
+    steps:
+      - uses: actions/checkout@v4
+      - name: 确认拿不到 secret（消费者处境）
+        env:
+          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LEAK_CHECK:-}" ]; then
+            echo "!! 未声明 environment 却拿到了 secret —— 前提不成立"; exit 1
+          fi
+          echo "OK: verify job 拿不到 secret（符合消费者处境）"
+      - name: 在干净 debian:sid 里验签
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/w" -w /w \
+            -e LAB_PAGES="$LAB_PAGES" \
+            -e ROOT_FPR="$ROOT_FPR" -e SUB_FPR="$SUB_DEBIAN" \
+            debian:sid bash /w/lab/verify-debian.sh
+
+  verify-fedora:
+    runs-on: ubuntu-latest
+    needs: [publish]
+    steps:
+      - uses: actions/checkout@v4
+      - name: 确认拿不到 secret（消费者处境）
+        env:
+          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LEAK_CHECK:-}" ]; then
+            echo "!! 未声明 environment 却拿到了 secret"; exit 1
+          fi
+          echo "OK: verify job 拿不到 secret（符合消费者处境）"
+      - name: 在干净 fedora:latest 里验签
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/w" -w /w \
+            -e LAB_PAGES="$LAB_PAGES" \
+            -e ROOT_FPR="$ROOT_FPR" -e SUB_FPR="$SUB_FEDORA" \
+            fedora:latest bash /w/lab/verify-fedora.sh
+
+  verify-arch:
+    runs-on: ubuntu-latest
+    needs: [publish]
+    steps:
+      - uses: actions/checkout@v4
+      - name: 确认拿不到 secret（消费者处境）
+        env:
+          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LEAK_CHECK:-}" ]; then
+            echo "!! 未声明 environment 却拿到了 secret"; exit 1
+          fi
+          echo "OK: verify job 拿不到 secret（符合消费者处境）"
+      - name: 在干净 archlinux:base 里验签
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/w" -w /w \
+            -e LAB_PAGES="$LAB_PAGES" \
+            -e ROOT_FPR="$ROOT_FPR" -e SUB_FPR="$SUB_ARCH" \
+            archlinux:base bash /w/lab/verify-arch.sh
