@@ -286,3 +286,24 @@ jobs:
             -v "$PWD:/w" -w /w \
             -e LINE="${{ matrix.line }}" -e ALGO="${{ matrix.algo }}" \
             "${{ matrix.image }}" bash /w/lab/probe-rpm-signature.sh
+
+  # Follow-up: since the failure is neither the algorithm nor the subkey, how
+  # does this distro obtain the key from gpgkey= at all?
+  probe-rpm-keyimport:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: fedora43, image: "fedora:43" }
+          - { line: rocky10,  image: "rockylinux/rockylinux:10" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Probe key import on ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/w" -w /w \
+            -e LINE="${{ matrix.line }}" \
+            "${{ matrix.image }}" bash /w/lab/probe-rpm-keyimport.sh
