@@ -47,6 +47,12 @@ fetch() {
 }
 
 echo
+echo "=== wait for this publish to be live (branch deploys are async) ==="
+# shellcheck source=lib-site.sh
+source /w/lab/lib-site.sh
+wait_for_publish "$PAGES" "${EXPECT_SHA:?EXPECT_SHA not set}"
+
+echo
 echo "=== fetch public keys from Pages (the only channel a consumer has) ==="
 mkdir -p "$W"
 fetch "$PAGES/keys/qmdmm-root.gpg"            "$W/root.gpg"
@@ -113,6 +119,40 @@ echo "  after a rotation: is a revoked subkey's old output still accepted?"
 echo "=============================================================="
 run_scenario "E. source signed by the REVOKED subkey + current packages key" \
              "$W/packages.gpg" "$PAGES/$LINE-revoked" FAIL
+
+echo
+echo "=============================================================="
+echo "  install the keyring package: does one .deb configure BOTH sources?"
+echo "=============================================================="
+# This is the shape Debian's wiki blesses: a keyring package MUST ship the
+# certificates under /usr/share/keyrings and MAY also ship sources.list.d.
+# Nothing here is protected by a .deb signature - apt does not review those at
+# all - but by the fact that the package is served from the root-signed keyring
+# source, whose InRelease only the root key can sign.
+KEYRING_SRC="$PAGES/$LINE-keyring"
+fetch "$KEYRING_SRC/dists/$SUITE/main/binary-all/Packages" "$W/keyring-index"
+DEBPATH=$(awk '/^Filename:/{print $2; exit}' "$W/keyring-index")
+echo "  package: $DEBPATH"
+fetch "$KEYRING_SRC/$DEBPATH" "$W/keyring.deb"
+
+if ! dpkg -i "$W/keyring.deb" > /tmp/dpkg.log 2>&1; then
+  echo "  !! dpkg -i failed"; tail -15 /tmp/dpkg.log | sed 's/^/    /'; exit 1
+fi
+echo "  --- what it dropped ---"
+ls -l /usr/share/keyrings/qmdmm-*.gpg /etc/apt/sources.list.d/qmdmm.sources 2>&1 | sed 's/^/    /'
+echo "  --- the sources it wrote ---"
+sed 's/^/    /' /etc/apt/sources.list.d/qmdmm.sources
+
+# Keep the assertion about OUR sources: move the distro's own list aside.
+find /etc/apt/sources.list.d -maxdepth 1 -name 'debian.sources' -exec mv {} /tmp/debian.sources.off \; 2>/dev/null || true
+rm -rf /var/lib/apt/lists/*
+echo "  --- now a plain apt-get update, no -o overrides ---"
+set +e
+out=$(apt-get update 2>&1); rc=$?
+set -e
+echo "$out" | grep -E '^(Err|E:|W:|Get|Hit)' | sed 's/^/    /' || true
+if [ $rc -eq 0 ]; then echo "    => PASS: both sources accepted straight out of the box"
+else echo "    => FAIL: a consumer that installed the keyring package still cannot update"; exit 1; fi
 
 echo
 echo "=============================================================="

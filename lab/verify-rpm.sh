@@ -43,6 +43,12 @@ fetch() {
 }
 
 echo
+echo "=== wait for this publish to be live (branch deploys are async) ==="
+# shellcheck source=lib-site.sh
+source /w/lab/lib-site.sh
+wait_for_publish "$PAGES" "${EXPECT_SHA:?EXPECT_SHA not set}"
+
+echo
 echo "=== fetch public keys from Pages ==="
 mkdir -p "$W"
 fetch "$PAGES/keys/qmdmm-root.gpg"        "$W/root.gpg"

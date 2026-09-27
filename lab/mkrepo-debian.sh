@@ -25,20 +25,58 @@ D="$OUT/dists/$SUITE"
 ARCHDIR="$D/main/binary-all"
 
 echo "=== building $OUT (suite $SUITE) with key $KEY ==="
-mkdir -p "$ARCHDIR"
-{
-  echo "Package: qmdmm-lab"
-  echo "Version: 1.0"
-  echo "Architecture: all"
-  echo "Maintainer: QMdmm signing lab <lab@example.invalid>"
-  echo "Description: $DESC"
-} > "$ARCHDIR/Packages"
-gzip -kf "$ARCHDIR/Packages"
 
 # apt wants per-file checksums in Release; there is no apt-ftparchive here, so
 # compute them. md5/shasum keep this portable to macOS.
 md5_of() { md5 -q "$1" 2>/dev/null || md5sum "$1" | cut -d' ' -f1; }
 sha_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
+
+mkdir -p "$ARCHDIR"
+# If the repo carries packages in pool/, describe them for real (control is
+# read straight out of the .deb with ar+tar, since there is no dpkg-deb).
+# Otherwise emit a placeholder entry so Release still has something to list.
+found=0
+while IFS= read -r deb; do
+  rel="${deb#"$OUT"/}"
+  # Read control straight out of the .deb. No dpkg-deb here, and macOS's ar is
+  # a Mach-O archiver, so parse the ar container ourselves.
+  ctrl=$(python3 - "$deb" <<'PY'
+import sys, io, tarfile
+d = open(sys.argv[1], "rb").read()
+if d[:8] == b"!<arch>\n":
+    i = 8
+    while i + 60 <= len(d):
+        hdr = d[i:i+60]
+        name = hdr[0:16].decode(errors="replace").strip()
+        size = int(hdr[48:58].decode().strip() or 0)
+        body = d[i+60:i+60+size]
+        if name.startswith("control.tar"):
+            with tarfile.open(fileobj=io.BytesIO(body)) as tf:
+                for m in tf.getmembers():
+                    if m.name.lstrip("./") == "control":
+                        sys.stdout.write(tf.extractfile(m).read().decode())
+            break
+        i += 60 + size + (size % 2)
+PY
+)
+  printf '%s\n' "$ctrl" | grep -v '^$'
+  printf 'Filename: %s\n' "$rel"
+  printf 'Size: %s\n' "$(wc -c < "$deb" | tr -d ' ')"
+  printf 'MD5sum: %s\n' "$(md5_of "$deb")"
+  printf 'SHA256: %s\n' "$(sha_of "$deb")"
+  printf '\n'
+  found=1
+done < <(find "$OUT/pool" -name '*.deb' 2>/dev/null | sort) > "$ARCHDIR/Packages"
+if [ "$found" = 0 ]; then
+  {
+    echo "Package: qmdmm-lab"
+    echo "Version: 1.0"
+    echo "Architecture: all"
+    echo "Maintainer: QMdmm signing lab <lab@example.invalid>"
+    echo "Description: $DESC"
+  } > "$ARCHDIR/Packages"
+fi
+gzip -kf "$ARCHDIR/Packages"
 
 {
   echo "Origin: QMdmm Signing Lab"

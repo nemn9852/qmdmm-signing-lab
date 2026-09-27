@@ -149,6 +149,11 @@ jobs:
             (cd _site && find . -type f | sort | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g')
             echo '</pre>'
           } > _site/index.html
+          # Verify jobs wait on this: a branch deploy is async, so "push
+          # returned" does not mean "Pages is serving the new content".
+          printf '{"sha":"%s","run":"%s","at":"%s"}\n' \
+            "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(date -u +%FT%TZ)" > _site/publish.json
+          cat _site/publish.json
           echo "--- site contents ---"
           (cd _site && find . -type f | sort)
       - name: Publish to the gh-pages branch
@@ -197,6 +202,7 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e LAB_PAGES="$LAB_PAGES" -e ROOT_FPR="$ROOT_FPR" \
+            -e EXPECT_SHA="${{ github.sha }}" \
             -e LINE=debian -e SUITE=sid \
             debian:sid bash /w/lab/verify-debian.sh
 
@@ -227,6 +233,7 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e LAB_PAGES="$LAB_PAGES" -e ROOT_FPR="$ROOT_FPR" \
+            -e EXPECT_SHA="${{ github.sha }}" \
             -e LINE="${{ matrix.line }}" \
             "${{ matrix.image }}" bash /w/lab/verify-rpm.sh
 
@@ -250,5 +257,6 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e LAB_PAGES="$LAB_PAGES" -e ROOT_FPR="$ROOT_FPR" \
+            -e EXPECT_SHA="${{ github.sha }}" \
             -e LINE=arch \
             archlinux:base bash /w/lab/verify-arch.sh
