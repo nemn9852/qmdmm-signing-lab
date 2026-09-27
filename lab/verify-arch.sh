@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
-# 消费者视角（archlinux 容器）：pacman 的受信 key 全在【全局 keyring】，
-# 没有 per-repo 限定 ⇒ 这族「源内隔离」做不到，这里把这件事做实。
+#
+# Consumer-side check, run inside a clean archlinux:base container.
+# Public keys are fetched from Pages only - this job holds no secret at all.
+#
+# This line is the *negative* example: pacman keeps trusted keys in one global
+# keyring and has no per-repository trust scope, so "who may sign this repo" is
+# decided by "which keys were locally signed into the global keyring" - not by
+# the repo stanza. Demonstrated by resetting the keyring between scenarios:
+#
+#   A. import this line's subkey + lsign -> pacman -Sy PASSES
+#   B. import only the root key + lsign  -> pacman -Sy FAILS
+#
+# Consequence: on pacman the trust root cannot be protected by repo config.
+# The keyring package has to be distributed out of band (ArchWiki unofficial
+# keys route: download, check the fingerprint, pacman-key --add + --lsign-key).
 set -euo pipefail
 
 PAGES="${LAB_PAGES:?}"
@@ -8,30 +21,31 @@ ROOT_FPR="${ROOT_FPR:?}"
 SUB_FPR="${SUB_FPR:?}"
 W=/w/verify-arch
 
-echo "=== 环境 ==="
+echo "=== environment ==="
 . /etc/os-release && echo "  $PRETTY_NAME"
 echo "  pacman: $(pacman --version | head -1)"
 
 echo
-echo "=== 依赖 ==="
+echo "=== dependencies ==="
 if ! grep -qE '^[[:space:]]*Server' /etc/pacman.d/mirrorlist 2>/dev/null; then
   echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /etc/pacman.d/mirrorlist
 fi
-pacman -Sy --noconfirm --needed gnupg ca-certificates curl > /tmp/pi.log 2>&1 || { tail -20 /tmp/pi.log; exit 1; }
+pacman -Sy --noconfirm --needed gnupg ca-certificates curl > /tmp/pi.log 2>&1 </dev/null \
+  || { tail -20 /tmp/pi.log; exit 1; }
 
 fetch() {
   local url="$1" out="$2" i
   for i in 1 2 3 4 5 6 7 8 9 10; do
     curl -fsSL --max-time 30 "$url" -o "$out" && return 0
-    echo "    取 $url 失败（第 $i 次），5s 后重试"; sleep 5
+    echo "    fetch $url failed (attempt $i), retrying in 5s"; sleep 5
   done
-  echo "    !! 放弃: $url"; return 1
+  echo "    !! giving up: $url"; return 1
 }
 
 echo
-echo "=== 从 Pages 取公钥 ==="
+echo "=== fetch public keys from Pages ==="
 mkdir -p "$W"
-fetch "$PAGES/keys/qmdmm-root.gpg"        "$W/root.gpg"
+fetch "$PAGES/keys/qmdmm-root.gpg"          "$W/root.gpg"
 fetch "$PAGES/keys/arch/qmdmm-packages.gpg" "$W/packages.gpg"
 for f in "$W/root.gpg" "$W/packages.gpg"; do
   printf '  %-14s ' "$(basename "$f")"
@@ -60,7 +74,7 @@ reset_keyring() {
 
 run_scenario() {
   local name="$1" keyfile="$2" fpr="$3" expect="$4" out rc
-  printf '\n--- %s（导入 %s，期望 %s）\n' "$name" "$(basename "$keyfile")" "$expect"
+  printf '\n--- %s (import %s, expect %s)\n' "$name" "$(basename "$keyfile")" "$expect"
   reset_keyring
   pacman-key --add "$keyfile" > /dev/null 2>&1
   pacman-key --lsign-key "$fpr" > /dev/null 2>&1
@@ -71,23 +85,24 @@ run_scenario() {
   set -e
   echo "$out" | tail -6 | sed 's/^/    /'
   if [ "$expect" = PASS ]; then
-    if [ $rc -eq 0 ]; then echo "    => 通过 ✓"; else echo "    => ✗ 期望通过却失败（rc=$rc）"; return 1; fi
+    if [ $rc -eq 0 ]; then echo "    => PASS"
+    else echo "    => FAIL (expected PASS, got rc=$rc)"; return 1; fi
   else
-    if [ $rc -ne 0 ]; then echo "    => 被拒 ✓（rc=$rc）"
-    else echo "    => ✗ 期望被拒却通过了 —— 隔离失效！"; return 1; fi
+    if [ $rc -ne 0 ]; then echo "    => REJECTED (rc=$rc)"
+    else echo "    => FAIL (expected rejection, but it was accepted)"; return 1; fi
   fi
 }
 
 echo
 echo "=============================================================="
-echo "  pacman 线：信任只按「key 在不在全局 keyring」，不按源"
+echo "  pacman: trust is per-key-in-the-global-keyring, not per-repo"
 echo "=============================================================="
-run_scenario "A. 导入【该线子钥】公钥 + lsign" "$W/packages.gpg" "$SUB_FPR"  PASS
-run_scenario "B. 只导入【root】公钥 + lsign"   "$W/root.gpg"     "$ROOT_FPR" FAIL
+run_scenario "A. import this line's subkey + lsign" "$W/packages.gpg" "$SUB_FPR"  PASS
+run_scenario "B. import only the root key + lsign"  "$W/root.gpg"     "$ROOT_FPR" FAIL
 
 echo
 echo "=============================================================="
-echo "  结论：pacman 没有 per-repo 信任作用域 ——"
-echo "  「谁能签这个源」不是由源配置决定的，而是由「谁被 lsign 进全局 keyring」决定的。"
-echo "  ⇒ keyring 包必须带外分发（ArchWiki 的 unofficial keys 路线）。"
+echo "  pacman has no per-repo trust scope: the repo stanza does not"
+echo "  decide who may sign it, the global keyring does."
+echo "  => the keyring package must be distributed out of band."
 echo "=============================================================="

@@ -1,12 +1,17 @@
 name: signing-lab
 
-# 一次性演练：把「root key 签 keyring 源 + 每发行版子钥签日常源 + 消费者侧验签」
-# 整条链在真容器里跑通。设计见设计文档 §9。
+# Disposable end-to-end rehearsal of the QMdmm distro signing scheme:
+#   root key signs the keyring source; one sign-only subkey per distro line
+#   signs that line's day-to-day source; consumers get everything from Pages.
 #
-# 分工：
-#   sign-*    : 声明 environment ⇒ 拿得到该线的子钥 secret；在对应发行版容器里签
-#   publish    : 把 keys/ + 本机签好的 keyring 源 + CI 产出的日常源一起发上 Pages
-#   verify-*  : 不声明 environment ⇒ 拿不到任何 secret；公钥从 Pages 取（= 消费者处境）
+# Job split, and the point of it:
+#   sign-*   declare an environment, so they receive that line's subkey secret.
+#            The actual signing runs inside the distro's own container, so the
+#            toolchain under test is the real one.
+#   publish  collects public keys + both sources and pushes them to Pages.
+#   verify-* deliberately declare NO environment: they hold no secret at all,
+#            which is exactly a consumer's position. They fetch public keys
+#            from Pages and try to install/accept.
 on:
   workflow_dispatch: {}
   push:
@@ -26,14 +31,14 @@ env:
 
 jobs:
 
-  # ================= 签名侧：每发行版一个容器 =================
+  # ===================== signing side: one container per distro =====================
 
   sign-debian:
     runs-on: ubuntu-latest
-    environment: debian                      # ← 声明了才拿得到 SIGNING_KEY
+    environment: debian                     # <- only this makes SIGNING_KEY visible
     steps:
       - uses: actions/checkout@v4
-      - name: 在 debian:sid 里签日常源
+      - name: Sign the day-to-day source inside debian:sid
         env:
           SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
         run: |
@@ -55,7 +60,7 @@ jobs:
     environment: fedora
     steps:
       - uses: actions/checkout@v4
-      - name: 在 fedora:latest 里签日常源
+      - name: Sign the day-to-day source inside fedora:latest
         env:
           SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
         run: |
@@ -77,7 +82,7 @@ jobs:
     environment: arch
     steps:
       - uses: actions/checkout@v4
-      - name: 在 archlinux:base 里签日常源
+      - name: Sign the day-to-day source inside archlinux:base
         env:
           SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
         run: |
@@ -94,7 +99,7 @@ jobs:
           path: out/arch
           if-no-files-found: error
 
-  # ================= 发布侧：公钥 + 两个源都上 Pages =================
+  # ===================== publish: keys + both sources on Pages =====================
 
   publish:
     runs-on: ubuntu-latest
@@ -107,12 +112,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: 组装站点
+      - name: Assemble the site
         run: |
           set -euo pipefail
           mkdir -p _site
-          cp -r keys  _site/keys
-          cp -r repo  _site/repo
+          cp -r keys _site/keys
+          cp -r repo _site/repo
           for d in debian fedora arch; do
             src="artifacts/repo-$d"
             [ -d "$src" ] || continue
@@ -129,14 +134,14 @@ jobs:
             echo '<title>QMdmm signing lab</title>'
             echo '<h1>QMdmm signing lab</h1>'
             echo '<p>A disposable end-to-end test of the QMdmm distro signing scheme.'
-            echo 'These keys are test keys and are revoked when the lab ends.</p>'
+            echo 'These are test keys and are revoked when the lab ends.</p>'
             echo '<h2>Fingerprints</h2><pre>'
-            cat keys/fingerprints.txt | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g'
+            sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' keys/fingerprints.txt
             echo '</pre><h2>Tree</h2><pre>'
             (cd _site && find . -type f | sort | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g')
             echo '</pre>'
           } > _site/index.html
-          echo "--- 站点内容 ---"
+          echo "--- site contents ---"
           (cd _site && find . -type f | sort)
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -144,23 +149,23 @@ jobs:
       - id: deploy
         uses: actions/deploy-pages@v4
 
-  # ================= 消费者侧：空容器，拿不到任何 secret =================
+  # ===================== consumer side: no environment, no secret =====================
 
   verify-debian:
     runs-on: ubuntu-latest
-    needs: [publish]                          # ← 故意不声明 environment
+    needs: [publish]
     steps:
       - uses: actions/checkout@v4
-      - name: 确认拿不到 secret（消费者处境）
+      - name: Confirm no secret is reachable (a consumer's position)
         env:
           LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
         run: |
           set -euo pipefail
           if [ -n "${LEAK_CHECK:-}" ]; then
-            echo "!! 未声明 environment 却拿到了 secret —— 前提不成立"; exit 1
+            echo "!! secret visible without declaring an environment - premise does not hold"; exit 1
           fi
-          echo "OK: verify job 拿不到 secret（符合消费者处境）"
-      - name: 在干净 debian:sid 里验签
+          echo "OK: verify job sees no secret (same position as a consumer)"
+      - name: Verify inside a clean debian:sid
         run: |
           set -euo pipefail
           docker run --rm \
@@ -174,16 +179,16 @@ jobs:
     needs: [publish]
     steps:
       - uses: actions/checkout@v4
-      - name: 确认拿不到 secret（消费者处境）
+      - name: Confirm no secret is reachable (a consumer's position)
         env:
           LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
         run: |
           set -euo pipefail
           if [ -n "${LEAK_CHECK:-}" ]; then
-            echo "!! 未声明 environment 却拿到了 secret"; exit 1
+            echo "!! secret visible without declaring an environment"; exit 1
           fi
-          echo "OK: verify job 拿不到 secret（符合消费者处境）"
-      - name: 在干净 fedora:latest 里验签
+          echo "OK: verify job sees no secret (same position as a consumer)"
+      - name: Verify inside a clean fedora:latest
         run: |
           set -euo pipefail
           docker run --rm \
@@ -197,16 +202,16 @@ jobs:
     needs: [publish]
     steps:
       - uses: actions/checkout@v4
-      - name: 确认拿不到 secret（消费者处境）
+      - name: Confirm no secret is reachable (a consumer's position)
         env:
           LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
         run: |
           set -euo pipefail
           if [ -n "${LEAK_CHECK:-}" ]; then
-            echo "!! 未声明 environment 却拿到了 secret"; exit 1
+            echo "!! secret visible without declaring an environment"; exit 1
           fi
-          echo "OK: verify job 拿不到 secret（符合消费者处境）"
-      - name: 在干净 archlinux:base 里验签
+          echo "OK: verify job sees no secret (same position as a consumer)"
+      - name: Verify inside a clean archlinux:base
         run: |
           set -euo pipefail
           docker run --rm \
