@@ -156,13 +156,24 @@ diagnostics non-fatal (`set -e` killed one probe before it reached half its
 cases, so two of four variations were reported as results when they never ran).
 
 ### 3.8 Reading a path without checking whether it is a file
-
 The first version of the keyring check said "imports nothing — 0 bytes", which
 was wrong twice: `wc -c` was handed a **directory** (so the size was
 meaningless), and the directory was then read as a gpg homedir (so the listing
 came back empty). It actually contained a 2825-byte key file. Two independent
 wrong readings agreed with each other, which is exactly how a false result gets
 confidence. Print `ls -la`, not a size.
+
+### 3.9 Silenced output cannot tell "did nothing" from "never ran"
+
+The first dnf5-upgrade probe ran `dnf upgrade ... >/dev/null 2>&1` and then
+reported "still 5.2.18". That is not a result: it is equally consistent with the
+upgrade having found nothing, the command never executing, and the repos being
+unreachable. Assertions about *absence* need the absence to be visible —
+`dnf --refresh list --upgrades` and the upgrade's own output are what turned
+"nothing happened" into "the repos offer no newer dnf5".
+
+Same shape as 3.7. When a check reports that something is not there, print what
+you asked and what came back, not just the conclusion.
 
 ## 4. rpm is not one behaviour, and it is not an algorithm problem
 
@@ -283,12 +294,22 @@ Consequences, in order of how much they matter:
 - **Issue #24 should not carry a fedora:43 row without a note.** As listed it
   would fail `repo_gpgcheck` on that container. Two honest options: drop 43, or
   keep it and fall back to package-level `gpgcheck` there.
-- **A caveat that keeps this from being "43 is broken":** the failure is a
-  property of the dnf5 version, and dnf5 is updated inside a released Fedora.
-  A Fedora 43 user who has taken updates may well have a working dnf5; the
-  container image is not the same thing as an updated install. Worth a probe if
-  a 43 line ever matters again — DNF5's version is the thing to compare, not the
-  release number.
+- **And "a 43 user could just update dnf5" is not true**, which was worth checking
+  rather than assuming: `probe-fedora43-dnf5-upgrade.sh` refreshes metadata and
+  asks the repos directly.
+
+  ```
+  dnf --refresh list --upgrades dnf5 librepo   -> No matching packages to list
+  dnf upgrade -y dnf5 librepo                  -> Nothing to do.
+  after: rpm 6.0.2  dnf5 5.2.18.0              (unchanged)
+  ```
+
+  The Fedora 43 repos are reachable (base, updates and openh264 all loaded) and
+  offer no newer dnf5, so the three shapes stay rejected. That closes the last
+  escape route: Fedora 43 as it exists today cannot verify repomd, not merely
+  "the container image is stale".
+  (Scope, stated honestly: this is 43 as of 2026-09-27. Fedora could still
+  backport an update later, and 43 is near the end of its life regardless.)
 
 ## 5. Two-layer rpm keyring, confirmed
 
