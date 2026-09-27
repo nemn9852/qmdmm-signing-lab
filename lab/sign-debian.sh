@@ -52,10 +52,13 @@ echo "=== assert: the root secret is not usable inside this container ==="
 echo "  private key files: $(ls "$HOME/.gnupg/private-keys-v1.d/" 2>/dev/null | wc -l | tr -d ' ')"
 echo "  secret record types: $(gpg --with-colons --list-secret-keys 2>/dev/null | awk -F: '{printf "%s ", $1}')"
 ROOTFP=$(gpg --with-colons --list-secret-keys 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}')
-if printf 'probe\n' | gpg --batch --local-user "${ROOTFP}!" --detach-sign -o /dev/null 2>/dev/null; then
-  echo "  !! the primary secret can sign here - contradicts the design"; exit 1
+PROBE=$(mktemp)
+if printf 'probe\n' | gpg --batch --local-user "${ROOTFP}!" --detach-sign -o "$PROBE" 2>/dev/null; then
+  rm -f "$PROBE"; echo "  !! the primary secret can sign here - contradicts the design"; exit 1
 fi
+rm -f "$PROBE"
 echo "  OK: gpg refuses to sign with the primary key"
+echo "  (/dev/null check after using gpg: $(ls -ld /dev/null 2>&1 | tr -s ' ' | cut -d' ' -f1,5,9))"
 
 echo
 echo "=== build the day-to-day source (InRelease signed by this line's subkey) ==="

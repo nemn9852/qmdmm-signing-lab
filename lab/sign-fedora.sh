@@ -44,10 +44,13 @@ echo "=== assert: the root secret is not usable inside this container ==="
 echo "  private key files: $(ls "$HOME/.gnupg/private-keys-v1.d/" 2>/dev/null | wc -l | tr -d ' ')"
 echo "  secret record types: $(gpg --with-colons --list-secret-keys 2>/dev/null | awk -F: '{printf "%s ", $1}')"
 ROOTFP=$(gpg --with-colons --list-secret-keys 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}')
-if printf 'probe\n' | gpg --batch --local-user "${ROOTFP}!" --detach-sign -o /dev/null 2>/dev/null; then
-  echo "  !! the primary secret can sign here"; exit 1
+PROBE=$(mktemp)
+if printf 'probe\n' | gpg --batch --local-user "${ROOTFP}!" --detach-sign -o "$PROBE" 2>/dev/null; then
+  rm -f "$PROBE"; echo "  !! the primary secret can sign here"; exit 1
 fi
+rm -f "$PROBE"
 echo "  OK: gpg refuses to sign with the primary key"
+echo "  (/dev/null check after using gpg: $(ls -ld /dev/null 2>&1 | tr -s ' ' | cut -d' ' -f1,5,9))"
 
 echo
 echo "=== fetch a real, throwaway rpm to sign ==="
@@ -57,7 +60,8 @@ echo "=== fetch a real, throwaway rpm to sign ==="
 dnf install -y -q dnf-plugins-core </dev/null || true
 rm -rf /tmp/rpms; mkdir -p /tmp/rpms
 dnf download --destdir /tmp/rpms tree </dev/null
-RPM=$(ls /tmp/rpms/*.rpm | head -1)
+RPM=$(ls /tmp/rpms/*.rpm 2>/dev/null | head -1 || true)
+if [ -z "$RPM" ]; then echo "  !! dnf download produced no rpm"; exit 1; fi
 echo "  $RPM"
 rpm -qp --qf '  before signing: %{NAME}-%{VERSION}-%{RELEASE}  sig=%{SIGPGP:pgpsig}\n' "$RPM" 2>/dev/null \
   || echo "  before signing: (no signature field)"
