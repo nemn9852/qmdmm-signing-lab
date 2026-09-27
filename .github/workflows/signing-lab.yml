@@ -309,3 +309,25 @@ jobs:
             -v "$PWD:/w" -w /w \
             -e LINE="${{ matrix.line }}" -e ALGO="${{ matrix.algo }}" \
             "${{ matrix.image }}" bash /w/lab/probe-rpm-keyimport.sh
+
+  # Third probe: the key DOES land in dnf5's per-repo keyring and verification
+  # still fails, so isolate which property of the key/signature it objects to.
+  probe-rpm-verify:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: fedora43, image: "fedora:43",                algo: ed25519 }
+          - { line: fedora43, image: "fedora:43",                algo: rsa4096 }
+          - { line: rocky10,  image: "rockylinux/rockylinux:10", algo: ed25519 }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Probe what dnf needs to accept repomd.xml on ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/w" -w /w \
+            -e LINE="${{ matrix.line }}" -e ALGO="${{ matrix.algo }}" \
+            "${{ matrix.image }}" bash /w/lab/probe-rpm-verify.sh
