@@ -308,8 +308,21 @@ Consequences, in order of how much they matter:
   offer no newer dnf5, so the three shapes stay rejected. That closes the last
   escape route: Fedora 43 as it exists today cannot verify repomd, not merely
   "the container image is stale".
-  (Scope, stated honestly: this is 43 as of 2026-09-27. Fedora could still
-  backport an update later, and 43 is near the end of its life regardless.)
+
+  **Independently corroborated** by Fedora's own package index
+  (`packages.fedoraproject.org/pkgs/dnf5/dnf5/`), which shows the branch each
+  release sits on rather than one moment in time:
+
+  ```
+  Fedora 43        5.2.18.0-5.fc43        <- still the 5.2 branch
+  Fedora 44        5.4.5.0-1.fc44         <- moved to 5.4
+  Fedora 45        5.4.5.0-1.fc45
+  Fedora rawhide   5.4.6.0-1.fc46
+  ```
+
+  So 43 is not "waiting for an update": it stays on 5.2.x, because a released
+  Fedora does not rebase its package manager to a new minor series. Waiting
+  would not have helped.
 
 ## 5. Two-layer rpm keyring, confirmed
 
