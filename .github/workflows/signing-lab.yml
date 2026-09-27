@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out/debian
-          printf '%s' "$SIGNING_KEY_B64" | docker run --rm -i \
+          printf '%s\n' "$SIGNING_KEY_B64" | docker run --rm -i \
             -v "$PWD:/w" -w /w \
             -e SUB_FPR="$SUB_DEBIAN" \
             debian:sid bash /w/lab/sign-debian.sh
@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out/fedora
-          printf '%s' "$SIGNING_KEY_B64" | docker run --rm -i \
+          printf '%s\n' "$SIGNING_KEY_B64" | docker run --rm -i \
             -v "$PWD:/w" -w /w \
             -e SUB_FPR="$SUB_FEDORA" \
             fedora:latest bash /w/lab/sign-fedora.sh
@@ -83,7 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out/arch
-          printf '%s' "$SIGNING_KEY_B64" | docker run --rm -i \
+          printf '%s\n' "$SIGNING_KEY_B64" | docker run --rm -i \
             -v "$PWD:/w" -w /w \
             -e SUB_FPR="$SUB_ARCH" \
             archlinux:base bash /w/lab/sign-arch.sh
@@ -114,9 +114,14 @@ jobs:
           cp -r keys  _site/keys
           cp -r repo  _site/repo
           for d in debian fedora arch; do
-            if [ -d "artifacts/repo-$d" ]; then
-              rm -rf "_site/repo/$d/daily"
-              cp -r "artifacts/repo-$d" "_site/repo/$d/daily"
+            src="artifacts/repo-$d"
+            [ -d "$src" ] || continue
+            rm -rf "_site/repo/$d/daily"
+            mkdir -p "_site/repo/$d"
+            if [ -d "$src/daily" ]; then
+              cp -r "$src/daily" "_site/repo/$d/daily"
+            else
+              cp -r "$src/." "_site/repo/$d/daily"
             fi
           done
           {

@@ -40,9 +40,10 @@ for f in "$W/root.gpg" "$W/packages.gpg"; do
     | awk -F: '/^pub:/{p++} /^sub:/{s++} END{printf "pub=%d sub=%d\n", p+0, s+0}'
 done
 echo "  --- 消费者手里那把主钥指纹应为 $ROOT_FPR ---"
-GNUPGHOME=$(mktemp -d) gpg --batch --import "$W/root.gpg" 2>/dev/null
-GNUPGHOME=$_ gpg --with-colons --list-keys 2>/dev/null | awk -F: '/^fpr:/{print "    "$10; exit}'
-rm -rf "$_"
+TMPH=$(mktemp -d); chmod 700 "$TMPH"
+GNUPGHOME="$TMPH" gpg --batch --import "$W/root.gpg" 2>/dev/null
+GNUPGHOME="$TMPH" gpg --with-colons --list-keys 2>/dev/null | awk -F: '/^fpr:/{print "    "$10; exit}'
+rm -rf "$TMPH"
 
 run_scenario() {
   local name="$1" key="$2" path="$3" expect="$4"

@@ -18,7 +18,7 @@ dnf install -y -q gnupg2 rpm-build createrepo_c zstd
 
 echo
 echo "=== 从 stdin 导入子钥 ==="
-IFS= read -r KEY_B64
+IFS= read -r KEY_B64 || true   # 输入可能没有结尾换行 ⇒ read 返回非零，别让 set -e 杀掉
 printf '%s' "$KEY_B64" | gpg --batch --import 2>&1 | sed 's/^/  /'
 unset KEY_B64
 gpg --list-secret-keys --keyid-format=long | sed 's/^/  /'

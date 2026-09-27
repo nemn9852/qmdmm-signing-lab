@@ -14,6 +14,9 @@ echo "  pacman: $(pacman --version | head -1)"
 
 echo
 echo "=== 依赖 ==="
+if ! grep -qE '^[[:space:]]*Server' /etc/pacman.d/mirrorlist 2>/dev/null; then
+  echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /etc/pacman.d/mirrorlist
+fi
 pacman -Sy --noconfirm --needed gnupg ca-certificates curl > /tmp/pi.log 2>&1 || { tail -20 /tmp/pi.log; exit 1; }
 
 fetch() {

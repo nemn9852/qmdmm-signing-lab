@@ -13,11 +13,16 @@ echo "  pacman: $(pacman --version | head -1)"
 
 echo
 echo "=== 依赖 ==="
+# archlinux:base 镜像里 mirrorlist 默认整份被注释 ⇒ pacman -Sy 会「no servers configured」
+if ! grep -qE '^[[:space:]]*Server' /etc/pacman.d/mirrorlist 2>/dev/null; then
+  echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /etc/pacman.d/mirrorlist
+  echo "  （base 镜像无可用 mirror ⇒ 写入 geo.mirror.pkgbuild.com）"
+fi
 pacman -Sy --noconfirm --needed gnupg zstd > /tmp/pacman-install.log 2>&1 || { tail -20 /tmp/pacman-install.log; exit 1; }
 
 echo
 echo "=== 从 stdin 导入子钥 ==="
-IFS= read -r KEY_B64
+IFS= read -r KEY_B64 || true   # 输入可能没有结尾换行 ⇒ read 返回非零，别让 set -e 杀掉
 printf '%s' "$KEY_B64" | gpg --batch --import 2>&1 | sed 's/^/  /'
 unset KEY_B64
 gpg --list-secret-keys --keyid-format=long | sed 's/^/  /'
