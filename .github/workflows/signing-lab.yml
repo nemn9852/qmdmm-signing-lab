@@ -525,3 +525,58 @@ jobs:
           name: pack-${{ matrix.line }}-${{ matrix.version }}
           path: harness/out/
           if-no-files-found: error
+
+  # ================================================================= stage S
+  # Sign what stage A produced, once per row, in the row's own image and with
+  # that row's subkey. Format-level: this produces a signed repository, and the
+  # consumer that later reads it is a separate concern (stage B/C).
+  #
+  # The root-signed keyring source is not here on purpose - the root secret never
+  # enters CI, so that half stays a trusted-machine step. What runs here holds
+  # exactly one subkey and asserts it cannot sign as the root.
+  stage-s-sign:
+    name: "S sign (${{ matrix.line }} ${{ matrix.version }})"
+    if: github.event_name == 'workflow_dispatch'
+    needs: [stage-a-pack]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    environment: ${{ matrix.line }}          # <- only this makes SIGNING_KEY visible
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: debian, fmt: deb, version: trixie, image: "debian:trixie" }
+          - { line: debian, fmt: deb, version: forky, image: "debian:forky" }
+          - { line: debian, fmt: deb, version: sid, image: "debian:sid" }
+          - { line: ubuntu, fmt: deb, version: resolute, image: "ubuntu:resolute" }
+          - { line: ubuntu, fmt: deb, version: stonking, image: "ubuntu:stonking" }
+          - { line: fedora, fmt: rpm, version: 44, image: "fedora:44" }
+          - { line: fedora, fmt: rpm, version: 45, image: "fedora:45" }
+          - { line: fedora, fmt: rpm, version: rawhide, image: "fedora:rawhide" }
+          - { line: rocky, fmt: rpm, version: 10, image: "rockylinux/rockylinux:10" }
+          - { line: alma, fmt: rpm, version: 10, image: "almalinux:10" }
+          - { line: arch, fmt: pac, version: rolling, image: "archlinux:base" }
+          - { line: manjaro, fmt: pac, version: rolling, image: "manjarolinux/base:latest" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Fetch the packages stage A built
+        uses: actions/download-artifact@v7
+        with:
+          name: pack-${{ matrix.line }}-${{ matrix.version }}
+          path: pkgs
+      - name: Sign the repository
+        env:
+          SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
+          PKGS: ${{ github.workspace }}/pkgs
+          OUT: ${{ github.workspace }}/repo
+          LINE: ${{ matrix.line }}
+          # The apt suite is the row's version name; the rpm and pacman scripts
+          # have no use for it.
+          SUITE: ${{ matrix.version }}
+        run: bash "$PWD/lab/sign-repo-${{ matrix.fmt }}.sh"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: repo-${{ matrix.line }}-${{ matrix.version }}
+          path: repo
+          if-no-files-found: error
