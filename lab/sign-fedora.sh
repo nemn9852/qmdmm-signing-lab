@@ -40,11 +40,14 @@ unset KEY_B64
 gpg --list-secret-keys --keyid-format=long | sed 's/^/  /'
 
 echo
-echo "=== assert: no usable primary secret in this container ==="
-if gpg --list-secret-keys --with-colons | awk -F: '$1=="sec" && $2!="e"' | grep -q .; then
-  echo "  !! a usable primary secret is present"; exit 1
+echo "=== assert: the root secret is not usable inside this container ==="
+echo "  private key files: $(ls "$HOME/.gnupg/private-keys-v1.d/" 2>/dev/null | wc -l | tr -d ' ')"
+echo "  secret record types: $(gpg --with-colons --list-secret-keys 2>/dev/null | awk -F: '{printf "%s ", $1}')"
+ROOTFP=$(gpg --with-colons --list-secret-keys 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}')
+if printf 'probe\n' | gpg --batch --local-user "${ROOTFP}!" --detach-sign -o /dev/null 2>/dev/null; then
+  echo "  !! the primary secret can sign here"; exit 1
 fi
-echo "  OK"
+echo "  OK: gpg refuses to sign with the primary key"
 
 echo
 echo "=== build a throwaway rpm ==="
