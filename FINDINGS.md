@@ -135,7 +135,66 @@ requires touching the workflow.
 | gpg 2.5.24 `.rev` files | the armor BEGIN line is prefixed with `:` — gpg itself cannot import them; strip the preamble and that colon |
 | environment secrets | visible only to jobs that declare `environment:` — a feature here, not a nuisance |
 
-## 4. Two-layer rpm keyring, confirmed
+## 4. rpm is not one behaviour, and it is not an algorithm problem
+
+The lab assumed one rpm line would stand in for all rpm distros. That is wrong,
+and the way it is wrong is worth more than the rest of this document.
+
+| distro | rpm | dnf | repo_gpgcheck result |
+|---|---|---|---|
+| `fedora:43` | **6.0.2** | **dnf5 5.2.18** | **fails** — `Signing key not found` |
+| `rockylinux/rockylinux:10` | 4.19.1.1 | **dnf 4.20** | passes |
+| `almalinux:10` | 4.19.1.1 | **dnf 4.20** | passes |
+
+(`dnf 4.20`, not dnf5 — the earlier note claiming EL10 was dnf5 was simply wrong.)
+
+Before blaming a key type, both hypotheses were tested directly, in the same
+container, with the same throwaway key:
+
+| | subkey signs metadata | primary signs metadata |
+|---|---|---|
+| fedora:43, ed25519 | fail | fail |
+| fedora:43, rsa4096 | fail | fail |
+| rocky:10, ed25519 | pass | pass |
+| rocky:10, rsa4096 | pass | pass |
+
+So **it is neither the algorithm nor the subkey**: switching to RSA does not buy
+anything here. dnf5 on fedora:43 is not obtaining the key from `gpgkey=` at all.
+Binary and armored `gpgkey=` both fail; giving it `rpm --import` first does not
+help either.
+
+What the two systems print while trying is the useful part:
+
+```
+fedora:43                      rocky:10
+Importing OpenPGP key 0x64947284:      Importing GPG key 0xE762F939:
+  (no Userid line)                       Userid: "keyimport probe <ki@example.invalid>"
+>>> repomd.xml GPG signature
+    verification error:
+    Signing key not found              ok
+```
+
+**The same key is reported under a different keyid by the two systems**, and on
+fedora the import never gets far enough to print a Userid. That points at the
+keyid representation: rpm 6 / dnf5 speak OpenPGP v6, while the key here is a v4
+key produced by gpg 2.4.9.
+
+*Stated as inference, not fact:* this run does not prove the v4/v6 mismatch is
+the cause, only that the failure is independent of algorithm, of subkey-vs-
+primary, and of how `gpgkey=` is spelled. Worth knowing before someone spends a
+day regenerating keys as RSA hoping it fixes fedora.
+
+Consequences for the real scheme:
+
+- **Do not collapse the rpm lines.** "One representative distro is enough"
+  held for deb and pacman in this run; it does not hold here.
+- **fedora 43+ needs its own answer**, and that answer is not a different key
+  type. It may be a v6 key (gpg 2.5+ can make one; 2.4 cannot), or accepting
+  that `repo_gpgcheck` is not available there yet.
+- EL10 (rpm 4.19 / dnf4) behaves exactly as the design wants: per-repo metadata
+  signing works, and only the key named in `gpgkey=` may sign it.
+
+## 5. Two-layer rpm keyring, confirmed
 
 `dnf`'s `repo_gpgcheck` verifies `repomd.xml` against a **per-repository**
 keyring, created under `$cachedir/<repo>-<urlhash>/pubring` (observed:
@@ -147,7 +206,7 @@ imported into the global rpmdb, and dnf still rejected metadata signed by it
 when the repo's `gpgkey=` pointed at the root key. If dnf consulted the rpmdb
 for metadata, that scenario would have passed.
 
-## 5. pacman has no per-repo trust scope
+## 6. pacman has no per-repo trust scope
 
 With only the root key imported and locally signed, `pacman -Sy` against a db
 signed by the line's subkey fails outright ("key … is unknown", then "invalid or
@@ -158,7 +217,7 @@ corrupted database (PGP signature)"). Trust is decided by which keys are
 must be distributed out of band (the ArchWiki unofficial-keys route: download,
 check the fingerprint, `pacman-key --add`, `--lsign-key`).
 
-## 6. Carrying forward
+## 7. Carrying forward
 
 Every sign container should keep asserting, as this lab does:
 
