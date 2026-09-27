@@ -83,7 +83,7 @@ echo
 echo "=== build repo metadata + sign it (this is what repo_gpgcheck verifies) ==="
 mkdir -p "$DAILY"
 cp "$RPM" "$DAILY/"
-if ! createrepo_c --database --disable-deltarpm "$DAILY" > /tmp/createrepo.log 2>&1; then
+if ! createrepo_c "$DAILY" > /tmp/createrepo.log 2>&1; then
   echo "  !! createrepo_c failed"; tail -20 /tmp/createrepo.log | sed 's/^/    /'; exit 1
 fi
 gpg --batch --yes --local-user "${SUB_FPR}!" --detach-sign --armor \
