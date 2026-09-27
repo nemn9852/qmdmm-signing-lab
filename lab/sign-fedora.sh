@@ -19,7 +19,6 @@ if [ -z "$KEY_B64" ]; then
   IFS= read -r KEY_B64 || true
 fi
 
-SUB_FPR="${SUB_FPR:?}"
 OUT="${OUT:-/w/out/fedora}"
 DAILY="$OUT/daily"
 
@@ -39,6 +38,21 @@ echo "=== import subkey from stdin ==="
 printf '%s\n' "$KEY_B64" | base64 -d | gpg --batch --import 2>&1 | sed 's/^/  /'
 unset KEY_B64
 gpg --list-secret-keys --keyid-format=long | sed 's/^/  /'
+
+echo
+echo "=== which subkey signs here ==="
+# Discovered from the keyring rather than passed in, so rotating this line's
+# subkey does not require touching the workflow.
+SUB_FPR="${SUB_FPR:-}"
+if [ -z "$SUB_FPR" ]; then
+  mapfile -t _SUBS < <(gpg --with-colons --list-secret-keys 2>/dev/null \
+                        | awk -F: '/^ssb:/{f=1;next} f&&/^fpr:/{print $10; f=0}')
+  if [ "${#_SUBS[@]}" -ne 1 ]; then
+    echo "  !! expected exactly 1 usable subkey in this container, found ${#_SUBS[@]}"; exit 1
+  fi
+  SUB_FPR="${_SUBS[0]}"
+fi
+echo "  signing subkey = $SUB_FPR"
 
 echo
 echo "=== assert: the root secret is not usable inside this container ==="

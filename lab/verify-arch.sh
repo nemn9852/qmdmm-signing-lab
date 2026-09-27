@@ -18,7 +18,6 @@ set -euo pipefail
 
 PAGES="${LAB_PAGES:?}"
 ROOT_FPR="${ROOT_FPR:?}"
-SUB_FPR="${SUB_FPR:?}"
 W=/w/verify-arch
 
 echo "=== environment ==="
@@ -73,11 +72,15 @@ reset_keyring() {
 }
 
 run_scenario() {
-  local name="$1" keyfile="$2" fpr="$3" expect="$4" out rc
+  local name="$1" keyfile="$2" expect="$3" out rc lfpr
   printf '\n--- %s (import %s, expect %s)\n' "$name" "$(basename "$keyfile")" "$expect"
   reset_keyring
   pacman-key --add "$keyfile" > /dev/null 2>&1
-  pacman-key --lsign-key "$fpr" > /dev/null 2>&1
+  # lsign the key this file actually carries (its subkey if it has one)
+  lfpr=$(gpg --with-colons --import-options show-only --import "$keyfile" 2>/dev/null \
+         | awk -F: '$1=="sub"{s=$5} $1=="pub"{p=$5} END{print (s ? s : p)}')
+  echo "    lsigning key $lfpr"
+  pacman-key --lsign-key "$lfpr" > /dev/null 2>&1
   write_conf
   set +e
   out=$(pacman -Sy --config /tmp/pacman-lab.conf --noconfirm 2>&1)
@@ -97,8 +100,8 @@ echo
 echo "=============================================================="
 echo "  pacman: trust is per-key-in-the-global-keyring, not per-repo"
 echo "=============================================================="
-run_scenario "A. import this line's subkey + lsign" "$W/packages.gpg" "$SUB_FPR"  PASS
-run_scenario "B. import only the root key + lsign"  "$W/root.gpg"     "$ROOT_FPR" FAIL
+run_scenario "A. import this line's subkey + lsign" "$W/packages.gpg" PASS
+run_scenario "B. import only the root key + lsign"  "$W/root.gpg"     FAIL
 
 echo
 echo "=============================================================="

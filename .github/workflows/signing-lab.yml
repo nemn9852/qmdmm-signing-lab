@@ -23,10 +23,11 @@ permissions:
   id-token: write
 
 env:
+  # The root key does not rotate, so pinning its fingerprint here is fine.
+  # Each line's *subkey* is deliberately NOT listed: sign scripts discover it
+  # from the keyring they just imported, so rotating a subkey never requires
+  # editing this workflow.
   ROOT_FPR: DB05E5D9027139A493E7C9DDCD290DDA2AE83D38
-  SUB_DEBIAN: 22F94DB1069D1F24505CB5675779CAB6443DA554
-  SUB_FEDORA: 0CB6055FE24FCC8BEEFB6D99808EB86A8399B375
-  SUB_ARCH: 1D569E0B4281AA59A13217B0B7681D0609159052
   LAB_PAGES: https://nemn9852.github.io/qmdmm-signing-lab
 
 jobs:
@@ -52,7 +53,6 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
-            -e SUB_FPR="$SUB_DEBIAN" \
             debian:sid bash /w/lab/sign-debian.sh
           sudo chmod -R a+rX out
       - uses: actions/upload-artifact@v7
@@ -75,7 +75,6 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
-            -e SUB_FPR="$SUB_FEDORA" \
             fedora:latest bash /w/lab/sign-fedora.sh
           sudo chmod -R a+rX out
       - uses: actions/upload-artifact@v7
@@ -98,7 +97,6 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
-            -e SUB_FPR="$SUB_ARCH" \
             archlinux:base bash /w/lab/sign-arch.sh
           sudo chmod -R a+rX out
       - uses: actions/upload-artifact@v7
@@ -179,7 +177,7 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e LAB_PAGES="$LAB_PAGES" \
-            -e ROOT_FPR="$ROOT_FPR" -e SUB_FPR="$SUB_DEBIAN" \
+            -e ROOT_FPR="$ROOT_FPR" \
             debian:sid bash /w/lab/verify-debian.sh
 
   verify-fedora:
@@ -202,7 +200,7 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e LAB_PAGES="$LAB_PAGES" \
-            -e ROOT_FPR="$ROOT_FPR" -e SUB_FPR="$SUB_FEDORA" \
+            -e ROOT_FPR="$ROOT_FPR" \
             fedora:latest bash /w/lab/verify-fedora.sh
 
   verify-arch:
@@ -225,5 +223,5 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e LAB_PAGES="$LAB_PAGES" \
-            -e ROOT_FPR="$ROOT_FPR" -e SUB_FPR="$SUB_ARCH" \
+            -e ROOT_FPR="$ROOT_FPR" \
             archlinux:base bash /w/lab/verify-arch.sh

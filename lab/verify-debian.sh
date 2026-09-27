@@ -15,7 +15,6 @@ set -euo pipefail
 
 PAGES="${LAB_PAGES:?}"
 ROOT_FPR="${ROOT_FPR:?}"
-SUB_FPR="${SUB_FPR:?}"
 W=/w/verify-debian
 
 echo "=== environment ==="

@@ -21,7 +21,6 @@ if [ -z "$KEY_B64" ]; then
   IFS= read -r KEY_B64 || true
 fi
 
-SUB_FPR="${SUB_FPR:?SUB_FPR not set}"
 OUT="${OUT:-/w/out/debian}"
 DAILY="$OUT/daily"
 
@@ -46,6 +45,22 @@ echo "  --- secret view (sec# = primary secret absent, as designed) ---"
 gpg --list-secret-keys --keyid-format=long | sed 's/^/  /'
 echo "  --- private key files (expect exactly 1: this line's subkey) ---"
 ls -l "$HOME/.gnupg/private-keys-v1.d/" | sed 's/^/  /'
+
+echo
+echo "=== which subkey signs here ==="
+# Discovered from the keyring rather than passed in, so rotating this line's
+# subkey does not require touching the workflow. The assertion is the useful
+# part: a signing container should hold exactly one usable subkey.
+SUB_FPR="${SUB_FPR:-}"
+if [ -z "$SUB_FPR" ]; then
+  mapfile -t _SUBS < <(gpg --with-colons --list-secret-keys 2>/dev/null \
+                        | awk -F: '/^ssb:/{f=1;next} f&&/^fpr:/{print $10; f=0}')
+  if [ "${#_SUBS[@]}" -ne 1 ]; then
+    echo "  !! expected exactly 1 usable subkey in this container, found ${#_SUBS[@]}"; exit 1
+  fi
+  SUB_FPR="${_SUBS[0]}"
+fi
+echo "  signing subkey = $SUB_FPR"
 
 echo
 echo "=== assert: the root secret is not usable inside this container ==="
