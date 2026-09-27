@@ -258,6 +258,25 @@ Two things follow:
 So the fedora failure is confined to repository-metadata verification on
 rpm 6 / dnf5, and it is not a reason to change key material.
 
+### 4.2 How CI handles it: invert the assertion, do not accept a red job
+
+`verify-rpm (fedora)` used to be red on every run. A job that is red by design
+is worse than no job: it teaches everyone to read a red suite as normal, which
+is how the next real regression gets missed. So the assertion is inverted
+instead, scoped to that one line via `EXPECT_METADATA_REJECTED=1`:
+
+| scenario A outcome | result |
+|---|---|
+| metadata rejected | **PASS** — reported as the known limitation |
+| metadata verified | **FAIL**, and the message says the limitation is gone and the flag should be dropped |
+
+Scenario B (root-only key must be rejected) is skipped under the flag, with the
+reason printed: if A cannot be verified at all on this rpm/dnf, B says nothing
+about the two-layer split. It remains asserted on both EL lines, where it does.
+
+So the suite is green and still honest, and the day fedora fixes this the run
+goes red for a reason worth acting on.
+
 ## 5. Two-layer rpm keyring, confirmed
 
 `dnf`'s `repo_gpgcheck` verifies `repomd.xml` against a **per-repository**

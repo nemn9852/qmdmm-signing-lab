@@ -60,6 +60,13 @@ The verify jobs are the interesting half: not declaring an `environment:` means
 `${{ secrets.* }}` expands to empty, so they see nothing but what Pages
 publishes.
 
+One assertion is deliberately inverted. `verify-rpm` on `fedora:43` carries
+`EXPECT_METADATA_REJECTED=1`, because rpm 6.0.2 / dnf5 5.2.18 cannot verify
+`repomd.xml` signed by a gpg key at all (all six key shapes probed — FINDINGS.md
+§4.1). With the flag, a *rejection* passes and a *success* fails, so the job is
+green while the limitation stands and turns red the day fedora fixes it. Scenario
+B is skipped there for the same reason.
+
 ## Running it
 
 Push to `main`, or dispatch the workflow. The two steps that must stay off CI:
