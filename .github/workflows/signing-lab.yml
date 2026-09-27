@@ -296,14 +296,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { line: fedora43, image: "fedora:43" }
-          - { line: rocky10,  image: "rockylinux/rockylinux:10" }
+          - { line: fedora43, image: "fedora:43",                algo: ed25519 }
+          - { line: fedora43, image: "fedora:43",                algo: rsa4096 }
+          - { line: rocky10,  image: "rockylinux/rockylinux:10", algo: ed25519 }
+          - { line: rocky10,  image: "rockylinux/rockylinux:10", algo: rsa4096 }
     steps:
       - uses: actions/checkout@v7
-      - name: Probe key import on ${{ matrix.image }}
+      - name: Probe key import on ${{ matrix.image }} (${{ matrix.algo }})
         run: |
           set -euo pipefail
           docker run --rm \
             -v "$PWD:/w" -w /w \
-            -e LINE="${{ matrix.line }}" \
+            -e LINE="${{ matrix.line }}" -e ALGO="${{ matrix.algo }}" \
             "${{ matrix.image }}" bash /w/lab/probe-rpm-keyimport.sh

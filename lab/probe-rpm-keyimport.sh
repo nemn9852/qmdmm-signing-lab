@@ -17,11 +17,11 @@
 set -uo pipefail
 
 LINE="${LINE:-rpm}"
+ALGO="${ALGO:-ed25519}"
 W=/tmp/keyimport
-A_TAG=""
 FULLKEY=""
 
-echo "=== $LINE: how does dnf obtain the key? ==="
+echo "=== $LINE / $ALGO: how does dnf obtain the key? ==="
 . /etc/os-release && echo "  $PRETTY_NAME"
 echo "  rpm: $(rpm --version)"
 echo "  dnf: $(dnf --version | head -1)"
@@ -32,9 +32,9 @@ dnf install -y -q gnupg2 rpm-sign createrepo_c </dev/null >/dev/null 2>&1 || tru
 export GNUPGHOME=$W/gnupghome
 mkdir -p "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
 gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key \
-    'keyimport probe <ki@example.invalid>' ed25519 sign 0 >/dev/null 2>&1
+    'keyimport probe <ki@example.invalid>' "$ALGO" sign 0 >/dev/null 2>&1
 ROOT=$(gpg --with-colons --list-secret-keys 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}')
-gpg --batch --pinentry-mode loopback --passphrase '' --quick-add-key "$ROOT" ed25519 sign 0 >/dev/null 2>&1
+gpg --batch --pinentry-mode loopback --passphrase '' --quick-add-key "$ROOT" "$ALGO" sign 0 >/dev/null 2>&1
 SUB=$(gpg --with-colons --list-secret-keys "$ROOT" 2>/dev/null \
       | awk -F: '/^ssb:/{f=1;next} f&&/^fpr:/{print $10; f=0}' | tail -1)
 echo "  root = $ROOT"
@@ -68,8 +68,14 @@ gpgkey=$gpgkey
 EOF
 
   if [ "$preimport" = yes ]; then
-    if rpm --import "$W/pub.gpg" >/dev/null 2>&1; then echo "  [$tag] rpm --import: ok"
-    else echo "  [$tag] rpm --import: FAILED"; fi
+    local imp rc
+    imp=$(rpm --import "$W/pub.gpg" 2>&1); rc=$?
+    if [ $rc -eq 0 ]; then
+      echo "  [$tag] rpm --import: ok"
+    else
+      printf '  [%s] rpm --import: FAILED rc=%s -- %s\n' \
+             "$tag" "$rc" "$(printf '%s' "$imp" | head -2 | tr '\n' ' ')"
+    fi
   fi
 
   local out rc
@@ -93,6 +99,10 @@ EOF
     if [ -d "$kr" ]; then
       printf '  (directory, %s entries)\n' "$(ls -A "$kr" 2>/dev/null | wc -l | tr -d ' ')"
       ls -la "$kr" 2>/dev/null | sed -n '2,8p' | sed 's/^/        /'
+      printf '      keys inside it: '
+      GNUPGHOME="$kr" gpg --with-colons --list-keys 2>/dev/null \
+        | awk -F: '/^pub:/{printf "%s ", $5}' || true
+      echo
     else
       printf '  (%s bytes)\n' "$(wc -c < "$kr" 2>/dev/null | tr -d ' ')"
       gpg --no-default-keyring --keyring "$kr" --with-colons --list-keys 2>/dev/null \
