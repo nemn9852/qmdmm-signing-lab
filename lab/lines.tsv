@@ -1,0 +1,13 @@
+line	fmt	version	container	expect	sfx_runtime	sfx_dev
+debian	deb	trixie	debian:trixie	-6 -6-dev -common-dev -doc	-6	-6-dev
+debian	deb	forky	debian:forky	-6 -6-dev -common-dev -doc	-6	-6-dev
+debian	deb	sid	debian:sid	-6 -6-dev -common-dev -doc	-6	-6-dev
+ubuntu	deb	resolute	ubuntu:resolute	-6 -6-dev -common-dev -doc	-6	-6-dev
+ubuntu	deb	stonking	ubuntu:stonking	-6 -6-dev -common-dev -doc	-6	-6-dev
+fedora	rpm	44	fedora:44	-6 -6-devel -common-devel -doc	-6	-6-devel
+fedora	rpm	45	fedora:45	-6 -6-devel -common-devel -doc	-6	-6-devel
+fedora	rpm	rawhide	fedora:rawhide	-6 -6-devel -common-devel -doc	-6	-6-devel
+rocky	rpm	10	rockylinux/rockylinux:10	-6 -6-devel -common-devel -doc	-6	-6-devel
+alma	rpm	10	almalinux:10	-6 -6-devel -common-devel -doc	-6	-6-devel
+arch	pac	rolling	archlinux:base	-6	-6	-6
+manjaro	pac	rolling	manjarolinux/base:latest	-6	-6	-6

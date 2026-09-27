@@ -409,3 +409,38 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check the #24 container tags resolve
         run: bash "$PWD/lab/probe-matrix-tags.sh"
+
+  # Before the 12-row build matrix exists: can each row install the Qt 6
+  # toolchain stage A needs? Three of these images are unreleased distributions.
+  # The package list is read out of the harness's own pack-<fmt>.sh at run time,
+  # so this cannot drift from what stage A will ask for.
+  probe-toolchain:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: debian, fmt: deb, version: trixie, image: "debian:trixie" }
+          - { line: debian, fmt: deb, version: forky, image: "debian:forky" }
+          - { line: debian, fmt: deb, version: sid, image: "debian:sid" }
+          - { line: ubuntu, fmt: deb, version: resolute, image: "ubuntu:resolute" }
+          - { line: ubuntu, fmt: deb, version: stonking, image: "ubuntu:stonking" }
+          - { line: fedora, fmt: rpm, version: 44, image: "fedora:44" }
+          - { line: fedora, fmt: rpm, version: 45, image: "fedora:45" }
+          - { line: fedora, fmt: rpm, version: rawhide, image: "fedora:rawhide" }
+          - { line: rocky, fmt: rpm, version: 10, image: "rockylinux/rockylinux:10" }
+          - { line: alma, fmt: rpm, version: 10, image: "almalinux:10" }
+          - { line: arch, fmt: pac, version: rolling, image: "archlinux:base" }
+          - { line: manjaro, fmt: pac, version: rolling, image: "manjarolinux/base:latest" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Clone the packaging harness
+        run: git clone --depth 1 https://github.com/QMdmm/QMdmmPackagingCi.git harness
+      - name: Probe ${{ matrix.line }} / ${{ matrix.version }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/w" -w /w \
+            -e FMT="${{ matrix.fmt }}" -e HARNESS=/w/harness \
+            "${{ matrix.image }}" bash /w/lab/probe-toolchain.sh
