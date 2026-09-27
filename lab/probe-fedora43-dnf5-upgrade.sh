@@ -17,12 +17,21 @@ echo "=== fedora:43 with dnf5 upgraded ==="
 . /etc/os-release && echo "  $PRETTY_NAME"
 echo "  before: rpm $(rpm --version 2>/dev/null | awk '{print $3}')  dnf5 $(dnf5 --version 2>/dev/null | head -1 | awk '{print $3}')"
 
-dnf upgrade -y -q dnf5 librepo </dev/null >/dev/null 2>&1 || true
-hash -r 2>/dev/null || true
-
-echo "  after:  rpm $(rpm --version 2>/dev/null | awk '{print $3}')  dnf5 $(dnf5 --version 2>/dev/null | head -1 | awk '{print $3}')"
-echo "  (if dnf5 is still 5.2.18 there was no update available in this image)"
+# Show the evidence for whatever the upgrade does. Silencing this was a mistake:
+# 'still 5.2.18' cannot be told apart from 'the command never ran'.
+echo
+echo "--- what the repos actually offer (refresh metadata first) ---"
+dnf --refresh -q list --upgrades dnf5 librepo 2>&1 | sed 's/^/    /' | head -10
+echo "    --- all dnf5 versions visible in this image's repos ---"
+dnf --refresh -q --showduplicates list dnf5 2>&1 | sed 's/^/    /' | tail -6
 
 echo
-echo "########## re-running the three shapes with the upgraded dnf5 ##########"
+echo "--- upgrade attempt (full output) ---"
+dnf upgrade -y dnf5 librepo </dev/null 2>&1 | tail -15 | sed 's/^/    /'
+
+echo
+echo "  after:  rpm $(rpm --version 2>/dev/null | awk '{print $3}')  dnf5 $(dnf5 --version 2>/dev/null | head -1 | awk '{print $3}')"
+
+echo
+echo "########## re-running the three shapes with whatever dnf5 is now installed ##########"
 LINE="fedora:43+updates" ALGO=ed25519 bash /w/lab/probe-rpm-verify.sh
