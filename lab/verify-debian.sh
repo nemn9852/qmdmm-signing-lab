@@ -3,23 +3,32 @@
 # Consumer-side check, run inside a clean debian:sid container.
 # Public keys are fetched from Pages only - this job holds no secret at all.
 #
-# 4-cell isolation matrix:
+# The published layout is one directory per distro, so a consumer's
+# sources.list can point straight at it:
+#
+#   deb [signed-by=.../qmdmm-packages.gpg] <pages>/debian sid main
+#
+# The keyring source lives next door at <pages>/debian-keyring: the two sources
+# have to carry different Signed-By files, so they cannot share a directory.
+#
+# Cells A-D are the isolation matrix; E is what a rotation leaves behind:
 #   A. keyring source (root-signed)  + root key      -> must PASS
 #   B. day-to-day source (subkey)    + packages key  -> must PASS
-#   C. day-to-day source (subkey)    + root key      -> must FAIL  <- the whole point
+#   C. day-to-day source (subkey)    + root key      -> must FAIL  <- the point
 #   D. keyring source (root-signed)  + packages key  -> must PASS
-#
-# C is what makes the scheme worth anything: a leaked per-distro subkey must
-# not be able to forge the source that carries the trust root.
+#   E. source signed by a REVOKED subkey, + refreshed packages key -> must FAIL
 set -euo pipefail
 
 PAGES="${LAB_PAGES:?}"
 ROOT_FPR="${ROOT_FPR:?}"
+SUITE="${SUITE:-sid}"
+LINE="${LINE:-debian}"
 W=/w/verify-debian
 
 echo "=== environment ==="
 . /etc/os-release && echo "  $PRETTY_NAME"
 echo "  gpg: $(gpg --version | head -1)"
+echo "  line=$LINE suite=$SUITE"
 
 echo
 echo "=== dependencies ==="
@@ -41,7 +50,7 @@ echo
 echo "=== fetch public keys from Pages (the only channel a consumer has) ==="
 mkdir -p "$W"
 fetch "$PAGES/keys/qmdmm-root.gpg"            "$W/root.gpg"
-fetch "$PAGES/keys/debian/qmdmm-packages.gpg" "$W/packages.gpg"
+fetch "$PAGES/keys/$LINE/qmdmm-packages.gpg"  "$W/packages.gpg"
 ls -l "$W"/*.gpg | sed 's/^/  /'
 echo "  --- what each file carries ---"
 for f in "$W/root.gpg" "$W/packages.gpg"; do
@@ -58,11 +67,11 @@ GNUPGHOME="$TMPH" gpg --with-colons --list-keys 2>/dev/null \
 rm -rf "$TMPH"
 
 run_scenario() {
-  local name="$1" key="$2" path="$3" expect="$4"
+  local name="$1" key="$2" url="$3" expect="$4"
   printf '\n--- %s\n' "$name"
-  printf '    source=%s  key=%s  expect=%s\n' "$path" "$(basename "$key")" "$expect"
+  printf '    source=%s  key=%s  expect=%s\n' "$url" "$(basename "$key")" "$expect"
   cat > /tmp/sources.list <<EOF
-deb [signed-by=$key] $PAGES/repo/debian/$path stable main
+deb [signed-by=$key] $url $SUITE main
 EOF
   rm -rf /tmp/lists /tmp/cache
   mkdir -p /tmp/lists/partial /tmp/cache/archives/partial /tmp/empty
@@ -91,19 +100,19 @@ EOF
 
 echo
 echo "=============================================================="
-echo "  debian: 4-cell isolation matrix"
+echo "  debian: isolation matrix"
 echo "=============================================================="
-run_scenario "A. keyring source (root-signed) + root key"     "$W/root.gpg"     "keyring" PASS
-run_scenario "B. day-to-day source (subkey)   + packages key" "$W/packages.gpg" "daily"   PASS
-run_scenario "C. day-to-day source (subkey)   + root key"     "$W/root.gpg"     "daily"   FAIL
-run_scenario "D. keyring source (root-signed) + packages key" "$W/packages.gpg" "keyring" PASS
+run_scenario "A. keyring source (root-signed) + root key"      "$W/root.gpg"     "$PAGES/$LINE-keyring" PASS
+run_scenario "B. day-to-day source (subkey)   + packages key"  "$W/packages.gpg" "$PAGES/$LINE"         PASS
+run_scenario "C. day-to-day source (subkey)   + root key"      "$W/root.gpg"     "$PAGES/$LINE"         FAIL
+run_scenario "D. keyring source (root-signed) + packages key"  "$W/packages.gpg" "$PAGES/$LINE-keyring" PASS
 
 echo
 echo "=============================================================="
-echo "  after a rotation: does a revoked subkey's old output still pass?"
+echo "  after a rotation: is a revoked subkey's old output still accepted?"
 echo "=============================================================="
 run_scenario "E. source signed by the REVOKED subkey + current packages key" \
-             "$W/packages.gpg" "daily-revoked" FAIL
+             "$W/packages.gpg" "$PAGES/$LINE-revoked" FAIL
 
 echo
 echo "=============================================================="

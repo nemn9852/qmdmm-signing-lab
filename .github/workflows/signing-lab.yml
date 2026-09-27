@@ -8,19 +8,19 @@ name: signing-lab
 #   sign-*   declare an environment, so they receive that line's subkey secret.
 #            The actual signing runs inside the distro's own container, so the
 #            toolchain under test is the real one.
-#   publish  collects public keys + both sources and pushes them to Pages.
+#   publish  assembles the site and pushes it to the gh-pages branch. Pages
+#            serves that branch, so the published layout IS the repository
+#            layout: <pages>/<distro> is a repository root a consumer can put
+#            straight into sources.list / baseurl.
 #   verify-* deliberately declare NO environment: they hold no secret at all,
-#            which is exactly a consumer's position. They fetch public keys
-#            from Pages and try to install/accept.
+#            which is exactly a consumer's position.
 on:
   workflow_dispatch: {}
   push:
     branches: [main]
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write            # publish pushes the gh-pages branch
 
 env:
   # The root key does not rotate, so pinning its fingerprint here is fine.
@@ -32,18 +32,13 @@ env:
 
 jobs:
 
-  # ===================== signing side: one container per distro =====================
+  # ===================== signing side: one container per line =====================
 
   sign-debian:
     runs-on: ubuntu-latest
     environment: debian                     # <- only this makes SIGNING_KEY visible
     steps:
       - uses: actions/checkout@v7
-      - name: Probe whether stdin can be piped into a container here
-        run: |
-          set -euo pipefail
-          printf 'probe-payload\n' | docker run --rm -i debian:sid \
-            bash -c 'IFS= read -r X || true; echo "container received: [$X]"'
       - name: Sign the day-to-day source inside debian:sid
         env:
           SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
@@ -53,6 +48,7 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
+            -e OUT=/w/out/debian -e SUITE=sid \
             debian:sid bash /w/lab/sign-debian.sh
           sudo chmod -R a+rX out
       - uses: actions/upload-artifact@v7
@@ -61,26 +57,35 @@ jobs:
           path: out/debian
           if-no-files-found: error
 
-  sign-fedora:
+  sign-rpm:
     runs-on: ubuntu-latest
-    environment: fedora
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: fedora, image: "fedora:43",     env: fedora }
+          - { line: rocky,  image: "rockylinux:10", env: rocky  }
+          - { line: alma,   image: "almalinux:10",  env: alma   }
+    environment: ${{ matrix.env }}
     steps:
       - uses: actions/checkout@v7
-      - name: Sign the day-to-day source inside fedora:latest
+      - name: Sign the day-to-day source inside ${{ matrix.image }}
         env:
           SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
         run: |
           set -euo pipefail
-          mkdir -p out/fedora
+          mkdir -p "out/${{ matrix.line }}"
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
-            fedora:latest bash /w/lab/sign-fedora.sh
+            -e OUT="/w/out/${{ matrix.line }}" \
+            -e LINE="${{ matrix.line }}" \
+            "${{ matrix.image }}" bash /w/lab/sign-rpm.sh
           sudo chmod -R a+rX out
       - uses: actions/upload-artifact@v7
         with:
-          name: repo-fedora
-          path: out/fedora
+          name: repo-${{ matrix.line }}
+          path: out/${{ matrix.line }}
           if-no-files-found: error
 
   sign-arch:
@@ -97,6 +102,7 @@ jobs:
           docker run --rm \
             -v "$PWD:/w" -w /w \
             -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
+            -e OUT=/w/out/arch -e LINE=arch \
             archlinux:base bash /w/lab/sign-arch.sh
           sudo chmod -R a+rX out
       - uses: actions/upload-artifact@v7
@@ -105,14 +111,11 @@ jobs:
           path: out/arch
           if-no-files-found: error
 
-  # ===================== publish: keys + both sources on Pages =====================
+  # ===================== publish: assemble and push gh-pages =====================
 
   publish:
     runs-on: ubuntu-latest
-    needs: [sign-debian, sign-fedora, sign-arch]
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+    needs: [sign-debian, sign-rpm, sign-arch]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -122,18 +125,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p _site
-          cp -r keys _site/keys
-          cp -r repo _site/repo
-          for d in debian fedora arch; do
+          cp -r site/. _site/                     # locally signed material
+          mkdir -p _site/keys && cp -r keys/. _site/keys/
+          for d in debian fedora rocky alma arch; do
             src="artifacts/repo-$d"
             [ -d "$src" ] || continue
-            rm -rf "_site/repo/$d/daily"
-            mkdir -p "_site/repo/$d"
-            if [ -d "$src/daily" ]; then
-              cp -r "$src/daily" "_site/repo/$d/daily"
-            else
-              cp -r "$src/." "_site/repo/$d/daily"
-            fi
+            rm -rf "_site/$d"; mkdir -p "_site/$d"
+            cp -r "$src/." "_site/$d/"
           done
           {
             echo '<!doctype html><meta charset="utf-8">'
@@ -143,17 +141,39 @@ jobs:
             echo 'These are test keys and are revoked when the lab ends.</p>'
             echo '<h2>Fingerprints</h2><pre>'
             sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' keys/fingerprints.txt
-            echo '</pre><h2>Tree</h2><pre>'
+            echo '</pre><h2>Repository roots</h2><ul>'
+            for d in debian debian-keyring debian-revoked fedora rocky alma arch; do
+              [ -d "_site/$d" ] && echo "<li><a href=\"$d/\">$d/</a></li>"
+            done
+            echo '</ul><h2>Tree</h2><pre>'
             (cd _site && find . -type f | sort | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g')
             echo '</pre>'
           } > _site/index.html
           echo "--- site contents ---"
           (cd _site && find . -type f | sort)
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: _site
-      - id: deploy
-        uses: actions/deploy-pages@v5
+      - name: Publish to the gh-pages branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git init -q _pub && cd _pub
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch -q --depth 1 origin gh-pages 2>/dev/null; then
+            git checkout -q -B gh-pages FETCH_HEAD
+          else
+            git checkout -q --orphan gh-pages
+          fi
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -r ../_site/. .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no changes to publish"
+          else
+            git -c user.name="Neve M. Nguyen" -c user.email="nemn9852@agent.qq.com" \
+                commit -q -m "publish ${GITHUB_SHA:0:7}"
+            git push -q origin gh-pages
+            echo "pushed gh-pages"
+          fi
 
   # ===================== consumer side: no environment, no secret =====================
 
@@ -168,7 +188,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${LEAK_CHECK:-}" ]; then
-            echo "!! secret visible without declaring an environment - premise does not hold"; exit 1
+            echo "!! secret visible without declaring an environment"; exit 1
           fi
           echo "OK: verify job sees no secret (same position as a consumer)"
       - name: Verify inside a clean debian:sid
@@ -176,13 +196,20 @@ jobs:
           set -euo pipefail
           docker run --rm \
             -v "$PWD:/w" -w /w \
-            -e LAB_PAGES="$LAB_PAGES" \
-            -e ROOT_FPR="$ROOT_FPR" \
+            -e LAB_PAGES="$LAB_PAGES" -e ROOT_FPR="$ROOT_FPR" \
+            -e LINE=debian -e SUITE=sid \
             debian:sid bash /w/lab/verify-debian.sh
 
-  verify-fedora:
+  verify-rpm:
     runs-on: ubuntu-latest
     needs: [publish]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: fedora, image: "fedora:43"     }
+          - { line: rocky,  image: "rockylinux:10" }
+          - { line: alma,   image: "almalinux:10"  }
     steps:
       - uses: actions/checkout@v7
       - name: Confirm no secret is reachable (a consumer's position)
@@ -194,14 +221,14 @@ jobs:
             echo "!! secret visible without declaring an environment"; exit 1
           fi
           echo "OK: verify job sees no secret (same position as a consumer)"
-      - name: Verify inside a clean fedora:latest
+      - name: Verify inside a clean ${{ matrix.image }}
         run: |
           set -euo pipefail
           docker run --rm \
             -v "$PWD:/w" -w /w \
-            -e LAB_PAGES="$LAB_PAGES" \
-            -e ROOT_FPR="$ROOT_FPR" \
-            fedora:latest bash /w/lab/verify-fedora.sh
+            -e LAB_PAGES="$LAB_PAGES" -e ROOT_FPR="$ROOT_FPR" \
+            -e LINE="${{ matrix.line }}" \
+            "${{ matrix.image }}" bash /w/lab/verify-rpm.sh
 
   verify-arch:
     runs-on: ubuntu-latest
@@ -222,6 +249,6 @@ jobs:
           set -euo pipefail
           docker run --rm \
             -v "$PWD:/w" -w /w \
-            -e LAB_PAGES="$LAB_PAGES" \
-            -e ROOT_FPR="$ROOT_FPR" \
+            -e LAB_PAGES="$LAB_PAGES" -e ROOT_FPR="$ROOT_FPR" \
+            -e LINE=arch \
             archlinux:base bash /w/lab/verify-arch.sh

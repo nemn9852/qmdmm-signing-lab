@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 #
-# Consumer-side check, run inside a clean fedora container.
-# Public keys are fetched from Pages only - this job holds no secret at all.
+# Consumer-side check, run inside a clean dnf-based container (fedora / rocky /
+# alma all use this script). Public keys come from Pages only - this job holds
+# no secret at all.
 #
 # What is checked: dnf's repository-metadata signature (repo_gpgcheck).
-# In dnf5 that metadata is verified against a *per-repository* keyring, so
-# only the key listed in this repo's gpgkey= can sign it.
+# In dnf5 that metadata is verified against a *per-repository* keyring, so only
+# the key listed in this repo's gpgkey= can sign it.
 #
 #   A. day-to-day source + packages key (root + this line's subkey) -> must PASS
 #   B. day-to-day source + root key (primary only)                  -> must FAIL
@@ -20,10 +21,12 @@
 set -euo pipefail
 
 PAGES="${LAB_PAGES:?}"
-W=/w/verify-fedora
+LINE="${LINE:?}"
+W=/w/verify-rpm
 
 echo "=== environment ==="
 . /etc/os-release && echo "  $PRETTY_NAME"
+echo "  line: $LINE"
 echo "  dnf: $(dnf --version | head -1)"
 
 echo
@@ -42,8 +45,8 @@ fetch() {
 echo
 echo "=== fetch public keys from Pages ==="
 mkdir -p "$W"
-fetch "$PAGES/keys/qmdmm-root.gpg"            "$W/root.gpg"
-fetch "$PAGES/keys/fedora/qmdmm-packages.gpg" "$W/packages.gpg"
+fetch "$PAGES/keys/qmdmm-root.gpg"        "$W/root.gpg"
+fetch "$PAGES/keys/$LINE/qmdmm-packages.gpg" "$W/packages.gpg"
 for f in "$W/root.gpg" "$W/packages.gpg"; do
   printf '  %-14s ' "$(basename "$f")"
   gpg --with-colons --import-options show-only --import "$f" 2>/dev/null \
@@ -56,7 +59,7 @@ mk_repo() {
   cat > "$d/lab.repo" <<EOF
 [lab]
 name=QMdmm signing lab ($tag)
-baseurl=$PAGES/repo/fedora/daily
+baseurl=$PAGES/$LINE
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
@@ -77,9 +80,6 @@ run_scenario() {
   set -e
   echo "$out" | grep -iE 'signature|gpg|error|fail|metadata cache|repo' | head -8 | sed 's/^/    /' || true
 
-  # IMPORTANT: `dnf makecache` still exits 0 when the repomd signature fails to
-  # verify - it only prints ">>> repomd.xml GPG signature verification error".
-  # So the exit code is NOT a usable assertion here; look for the message.
   verr=0
   echo "$out" | grep -qi 'signature verification error' && verr=1
   echo "    exit=$rc  signature-error-in-output=$verr"
@@ -97,7 +97,7 @@ run_scenario() {
 
 echo
 echo "=============================================================="
-echo "  rpm: repository-metadata signature (repo_gpgcheck)"
+echo "  $LINE: repository-metadata signature (repo_gpgcheck)"
 echo "=============================================================="
 run_scenario "A. day-to-day source + packages key (root + subkey)" "$W/packages.gpg" PASS
 run_scenario "B. day-to-day source + root key (primary only)"      "$W/root.gpg"     FAIL

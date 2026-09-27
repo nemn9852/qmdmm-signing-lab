@@ -10,20 +10,21 @@
 #   - frozen fixtures, e.g. "a source signed by the subkey that was later
 #     revoked", kept around so a consumer-side test can prove it gets rejected.
 #
-# usage: mkrepo-debian.sh <key-fpr> <outdir> [description]
+# usage: mkrepo-debian.sh <key-fpr> <outdir> [suite] [description]
 set -euo pipefail
 
-KEY="${1:?usage: mkrepo-debian.sh <key-fpr> <outdir> [description]}"
-OUT="${2:?usage: mkrepo-debian.sh <key-fpr> <outdir> [description]}"
-DESC="${3:-QMdmm signing lab apt repository}"
+KEY="${1:?usage: mkrepo-debian.sh <key-fpr> <outdir> [suite] [description]}"
+OUT="${2:?usage: mkrepo-debian.sh <key-fpr> <outdir> [suite] [description]}"
+SUITE="${3:-sid}"
+DESC="${4:-QMdmm signing lab apt repository}"
 
 cd "$(dirname "$0")/.."                      # -> repo/
 source "$HOME/qmdmm-signing-lab/env.sh"      # GNUPGHOME
 
-D="$OUT/dists/stable"
+D="$OUT/dists/$SUITE"
 ARCHDIR="$D/main/binary-all"
 
-echo "=== building $OUT with key $KEY ==="
+echo "=== building $OUT (suite $SUITE) with key $KEY ==="
 mkdir -p "$ARCHDIR"
 {
   echo "Package: qmdmm-lab"

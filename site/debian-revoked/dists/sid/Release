@@ -2,13 +2,13 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: stable
 Codename: stable
-Date: Sun, 27 Sep 2026 02:00:07 UTC
+Date: Sun, 27 Sep 2026 02:17:36 UTC
 Architectures: all
 Components: main
 Description: frozen snapshot, signed by the subkey that is revoked next
 MD5Sum:
  50eaefe672188a4392fd5b9c6aa3a173              174 main/binary-all/Packages
- 624cc0c149fd435924b66da330a6b597              169 main/binary-all/Packages.gz
+ a6db6dcfdf7a7f3eef22caadcc907065              169 main/binary-all/Packages.gz
 SHA256:
  7c2424ac9942dacf1233705de52b2c07e57520dc92afea38979de7cda46cc9c1              174 main/binary-all/Packages
- f326d924414f8d580823d512eab2719c9ac908dd0f102feb675b17a59ae19d8d              169 main/binary-all/Packages.gz
+ 6860306ea5786a76ac36954e720eaa18728eea7a91f487878712625d4e229096              169 main/binary-all/Packages.gz

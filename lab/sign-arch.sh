@@ -19,7 +19,6 @@ if [ -z "$KEY_B64" ]; then
 fi
 
 OUT="${OUT:-/w/out/arch}"
-DAILY="$OUT/daily"
 
 echo "=== environment ==="
 . /etc/os-release && echo "  $PRETTY_NAME"
@@ -84,8 +83,8 @@ packager = QMdmm signing lab
 size = 4
 arch = any
 EOF
-mkdir -p "$DAILY"
-PKG="$DAILY/qmdmm-lab-1.0-1-any.pkg.tar.zst"
+mkdir -p "$OUT"
+PKG="$OUT/qmdmm-lab-1.0-1-any.pkg.tar.zst"
 ( cd "$P" && tar -cf - .PKGINFO ) | zstd -q -f -o "$PKG"
 
 echo
@@ -93,7 +92,7 @@ echo "=== sign the package itself, then build + sign the db ==="
 gpg --batch --yes --local-user "${SUB_FPR}!" --detach-sign "$PKG"
 ls -l "$PKG".sig | sed 's/^/  /'
 
-cd "$DAILY"
+cd "$OUT"
 repo-add -s -k "$SUB_FPR" lab.db.tar.gz qmdmm-lab-1.0-1-any.pkg.tar.zst 2>&1 | sed 's/^/  /'
 
 echo "  --- signature files ---"

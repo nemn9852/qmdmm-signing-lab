@@ -18,6 +18,7 @@ set -euo pipefail
 
 PAGES="${LAB_PAGES:?}"
 ROOT_FPR="${ROOT_FPR:?}"
+LINE="${LINE:-arch}"
 W=/w/verify-arch
 
 echo "=== environment ==="
@@ -45,7 +46,7 @@ echo
 echo "=== fetch public keys from Pages ==="
 mkdir -p "$W"
 fetch "$PAGES/keys/qmdmm-root.gpg"          "$W/root.gpg"
-fetch "$PAGES/keys/arch/qmdmm-packages.gpg" "$W/packages.gpg"
+fetch "$PAGES/keys/$LINE/qmdmm-packages.gpg" "$W/packages.gpg"
 for f in "$W/root.gpg" "$W/packages.gpg"; do
   printf '  %-14s ' "$(basename "$f")"
   gpg --with-colons --import-options show-only --import "$f" 2>/dev/null \
@@ -61,7 +62,7 @@ LocalFileSigLevel = Optional
 
 [lab]
 SigLevel = Required DatabaseRequired
-Server = $PAGES/repo/arch/daily
+Server = $PAGES/$LINE
 EOF
 }
 

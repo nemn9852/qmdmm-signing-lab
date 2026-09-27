@@ -37,7 +37,7 @@ echo "  outgoing subkey = $OLD_SUB"
 
 echo
 echo "=== 1) freeze the current day-to-day source as a fixture ==="
-bash lab/mkrepo-debian.sh "$OLD_SUB" "repo/$DISTRO/daily-revoked" \
+bash lab/mkrepo-debian.sh "$OLD_SUB" "site/$DISTRO-revoked" sid \
      "frozen snapshot, signed by the subkey that is revoked next"
 
 echo
@@ -61,7 +61,7 @@ echo "  new subkey = $NEW_SUB"
 
 echo
 echo "=== 4) re-sign the keyring source with the root key ==="
-bash lab/mkrepo-debian.sh "$ROOT" "repo/$DISTRO/keyring" \
+bash lab/mkrepo-debian.sh "$ROOT" "site/$DISTRO-keyring" sid \
      "keyring source (root-signed)"
 
 echo

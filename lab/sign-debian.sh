@@ -22,7 +22,8 @@ if [ -z "$KEY_B64" ]; then
 fi
 
 OUT="${OUT:-/w/out/debian}"
-DAILY="$OUT/daily"
+SUITE="${SUITE:-sid}"
+D="$OUT/dists/$SUITE"
 
 echo "=== environment ==="
 . /etc/os-release && echo "  $PRETTY_NAME"
@@ -77,15 +78,18 @@ echo "  (/dev/null check after using gpg: $(ls -ld /dev/null 2>&1 | tr -s ' ' | 
 
 echo
 echo "=== build the day-to-day source (InRelease signed by this line's subkey) ==="
-mkdir -p "$DAILY/dists/stable/main/binary-all"
-: > "$DAILY/dists/stable/main/binary-all/Packages"
-gzip -kf "$DAILY/dists/stable/main/binary-all/Packages"
-( cd "$DAILY/dists/stable" && apt-ftparchive release . > Release )
-gpg --batch --yes --local-user "${SUB_FPR}!" --clearsign \
-    -o "$DAILY/dists/stable/InRelease" "$DAILY/dists/stable/Release"
+# The repo root in the container maps 1:1 onto the published path, so a
+# consumer can point sources.list straight at <pages>/<distro>.
+mkdir -p "$D/main/binary-all"
+{ echo "Package: qmdmm-lab"; echo "Version: 1.0"; echo "Architecture: all"
+  echo "Maintainer: QMdmm signing lab <lab@example.invalid>"
+  echo "Description: QMdmm signing lab - day-to-day source"; } > "$D/main/binary-all/Packages"
+gzip -kf "$D/main/binary-all/Packages"
+( cd "$D" && apt-ftparchive release . > Release )
+gpg --batch --yes --local-user "${SUB_FPR}!" --clearsign -o "$D/InRelease" "$D/Release"
 
 echo "  --- who signed it (expect the root uid + the subkey fingerprint) ---"
-gpg --verify "$DAILY/dists/stable/InRelease" 2>&1 | sed 's/^/  /'
+gpg --verify "$D/InRelease" 2>&1 | sed 's/^/  /'
 
 echo
 echo "=== output ==="
