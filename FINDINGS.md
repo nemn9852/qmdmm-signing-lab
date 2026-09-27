@@ -135,6 +135,35 @@ requires touching the workflow.
 | gpg 2.5.24 `.rev` files | the armor BEGIN line is prefixed with `:` — gpg itself cannot import them; strip the preamble and that colon |
 | environment secrets | visible only to jobs that declare `environment:` — a feature here, not a nuisance |
 
+### 3.7 A control group has to be the *same object*
+
+Two mistakes here were the same mistake, and it cost two rounds:
+
+- The two probe containers each generated their **own** throwaway key, so
+  fedora's `0x64947284` and rocky's `0xE762F939` were never the same key. A
+  "different keyid on the two systems" theory was built on that, and written up,
+  before anyone checked whether the two samples were the same thing. Read the
+  fingerprints back first: they were each printing their own key's tail.
+- `rpm --import` "failing on both distros" was the probe handing rpm the
+  **binary** export; rpm wants armor
+  (`error: ...: key 1 not an armored public key`). That is a caller error being
+  read as a property of rpm. It would have gone straight into a conclusion
+  about EdDSA if the error text had not been captured.
+
+Cheap countermeasure, used from then on: have the probe **print the identity it
+is working on** (`keyid 0x…`) next to every verdict, and make non-fatal
+diagnostics non-fatal (`set -e` killed one probe before it reached half its
+cases, so two of four variations were reported as results when they never ran).
+
+### 3.8 Reading a path without checking whether it is a file
+
+The first version of the keyring check said "imports nothing — 0 bytes", which
+was wrong twice: `wc -c` was handed a **directory** (so the size was
+meaningless), and the directory was then read as a gpg homedir (so the listing
+came back empty). It actually contained a 2825-byte key file. Two independent
+wrong readings agreed with each other, which is exactly how a false result gets
+confidence. Print `ls -la`, not a size.
+
 ## 4. rpm is not one behaviour, and it is not an algorithm problem
 
 The lab assumed one rpm line would stand in for all rpm distros. That is wrong,
@@ -171,52 +200,63 @@ Importing OpenPGP key 0x2C2B3684:
       E9B30B832C2B3684.pub   2825 bytes
 ```
 
-**The import succeeds and verification fails anyway.** dnf5 writes a real,
-2825-byte public key file named after the keyid into its per-repo keyring, and
-then reports `Signing key not found` for metadata signed by that very key.
+**The import succeeds; verification fails.** dnf5 writes a real 2825-byte
+public-key file, named after the keyid, into its per-repo keyring — and then
+reports `Signing key not found` for metadata signed by that very key. So this is
+not an import problem, and the per-repo keyring does hold the key.
 
-**Correction (second revision of this paragraph).** An earlier attempt at this
-said the keyring was left empty ("0 bytes"), based on a `wc -c` that was being
-handed a *directory* and on trying to read that directory as a gpg homedir. The
-directory does contain the key. The import side of dnf5 is working; whatever is
-broken is on the verification side.
+The verify-side probe then removed the remaining suspects (fedora:43, ed25519):
 
-**Also retracted:** `rpm --import` "failed on both distros" was my probe's
-error, not a finding. rpm wants armored input and was handed the binary export
-(`error: /tmp/keyimport/pub.gpg: key 1 not an armored public key`). It is not
-evidence about EdDSA or about rpm's parser.
+| what signs the metadata | signature issuer keyid | file dnf stored | result |
+|---|---|---|---|
+| subkey | `4F89842A54B9D7C8` | `59C81CF071BE36C3.pub` (the primary) | rejected |
+| primary | `2764BAC9BE637229` | `2764BAC9BE637229.pub` | rejected |
+| primary, keyblock has no subkey at all | `ABE3EFDD280A3EDD` | `ABE3EFDD280A3EDD.pub` | rejected |
 
-**Correction (this document previously claimed something false here).** An
-earlier revision said "the same key is reported under a different keyid by the
-two systems" — fedora `0x64947284` vs rocky `0xE762F939` — and inferred an
-OpenPGP v6-vs-v4 keyid mismatch from it. That was wrong: this probe generates a
-**throwaway key inside each container**, so fedora and rocky necessarily work on
-different keys. The two fingerprints were read back and they are, indeed, that
-run's own keys (note: a *later* run gives fedora `0x2C2B3684`, a third key —
-the number is never comparable across runs, which is the whole point):
-
-```
-fedora:43  root = 9E84FC1D5CC3AB463F9B0DFFE7C5A6AF64947284   -> "0x64947284"
-rocky:10   root = B8BC55DBA7263BF85F85DEC2390773D1E762F939   -> "0xE762F939"
-```
-
-Each system was printing the tail of its own key. There is no cross-system keyid
-discrepancy to explain, and **no v6/v4 finding here at all**.
-
-(Related, same revision: it also said the `rpm --import` variants "do not help
-either". Those two variations were never run — `set -e` plus a failure inside
-the third `attempt` killed the job after variation 2. The probe is now written
-without `set -e` and reports all four; see below.)
+rsa4096 repeats the same three rejections, also with the keyid matching exactly
+in the two primary cases. **So it is neither a keyid lookup miss, nor the
+subkey, nor the algorithm:** rpm 6.0.2 / dnf5 5.2.18 on fedora:43 will not
+verify a `repomd.xml` signed by a gpg-generated key at all, while rpm 4.19 /
+dnf 4.20 accepts every shape. The split is version-correlated.
 
 Consequences for the real scheme:
 
 - **Do not collapse the rpm lines.** "One representative distro is enough"
   held for deb and pacman in this run; it does not hold here.
 - **fedora 43+ needs its own answer**, and that answer is not a different key
-  type. It may be a v6 key (gpg 2.5+ can make one; 2.4 cannot), or accepting
-  that `repo_gpgcheck` is not available there yet.
+  type (§4.1). The pragmatic one: do not rely on `repo_gpgcheck` there; sign
+  packages and let `gpgcheck` do the work.
 - EL10 (rpm 4.19 / dnf4) behaves exactly as the design wants: per-repo metadata
   signing works, and only the key named in `gpgkey=` may sign it.
+
+### 4.1 The package-level path works on fedora:43 — and ed25519 is fine
+
+Since `repo_gpgcheck` is unusable there, the question became whether the
+*package* path still works, which is also the old "EdDSA signs fine, installs
+badly" question. Asked directly on fedora:43 (rpm 6.0.2, dnf5 5.2.18, gpg 2.4.9,
+`%_openpgp_sign` = `gpg`), same key as the rest of the lab (primary + signing
+subkey):
+
+| step | ed25519 | rsa4096 |
+|---|---|---|
+| `rpm --import` armored export | rc=0, key lands in the rpmdb | rc=0 |
+| `rpm --import` binary export | rc=1 `not an armored public key` | rc=1 |
+| `rpmsign --addsign` with the **subkey** | rc=0 | rc=0 |
+| `rpm -K` signed package, key in rpmdb | **`digests signatures OK`** (rc=0) | same |
+| `rpm -K` again after removing the key | `digests SIGNATURES NOT OK` (rc=1) | same |
+
+Two things follow:
+
+1. **Package-level signing on rpm 6 fedora:43 works, and it works with
+   ed25519.** The EdDSA history did not reproduce here, so there is no evidence
+   to force RSA for the real root key. (The last row matters: without it, the
+   "OK" could have been a check that passes regardless.)
+2. **`rpm --import` wants armor, not a binary key.** `gpgkey=` in a `.repo`
+   file is a different path and accepted binary in this lab — but anything that
+   shells out to `rpm --import` must be handed `.asc`.
+
+So the fedora failure is confined to repository-metadata verification on
+rpm 6 / dnf5, and it is not a reason to change key material.
 
 ## 5. Two-layer rpm keyring, confirmed
 
