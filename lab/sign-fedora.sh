@@ -10,9 +10,9 @@
 #           OUT     = output dir inside the container (default /w/out/fedora)
 set -euo pipefail
 
-# The secret arrives either as $SIGNING_KEY_B64, or on stdin as a single
-# base64 line. In GitHub Actions the stdin route never reaches the container,
-# so the env route is the one used there.
+# The secret arrives as $SIGNING_KEY_B64, or on stdin as a single base64 line.
+# (An earlier revision blamed stdin for "not reaching the container"; a probe
+#  disproved that. The real bug was dropping `base64 -d`.)
 KEY_B64="${SIGNING_KEY_B64:-}"
 if [ -z "$KEY_B64" ]; then
   # Read stdin FIRST - dnf below consumes it.
@@ -35,7 +35,7 @@ dnf install -y -q gnupg2 rpm-build createrepo_c zstd </dev/null
 
 echo
 echo "=== import subkey from stdin ==="
-printf '%s\n' "$KEY_B64" | gpg --batch --import 2>&1 | sed 's/^/  /'
+printf '%s\n' "$KEY_B64" | base64 -d | gpg --batch --import 2>&1 | sed 's/^/  /'
 unset KEY_B64
 gpg --list-secret-keys --keyid-format=long | sed 's/^/  /'
 
