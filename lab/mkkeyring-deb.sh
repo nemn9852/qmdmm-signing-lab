@@ -78,47 +78,10 @@ mkdir -p "$POOL"
 rm -f "$POOL"/*.deb
 DEB="$(cd "$POOL" && pwd)/${PKG}_${VERSION}_all.deb"
 
-# A .deb is an ar archive holding debian-binary, control.tar.gz and data.tar.gz.
-#
-# Use dpkg-deb when it exists: that is what any Debian-ish box has, and what the
-# real pipeline will run on. The fallback below only exists because this lab is
-# driven from a Mac - macOS has no dpkg-deb, and its ar is a Mach-O archiver
-# that would produce a broken container.
-if command -v dpkg-deb >/dev/null 2>&1; then
-  dpkg-deb --build --root-owner-group "$ROOT" "$DEB" > /dev/null
-  echo "  built with dpkg-deb"
-else
-  echo "  no dpkg-deb here (a Mac) - writing the ar container directly"
-  ( cd "$ROOT/DEBIAN" && tar --uid 0 --gid 0 --uname root --gname root -czf "$WORK/control.tar.gz" . )
-  ( cd "$ROOT" && tar --uid 0 --gid 0 --uname root --gname root --exclude ./DEBIAN \
-      -czf "$WORK/data.tar.gz" . )
-  printf '2.0\n' > "$WORK/debian-binary"
-  python3 - "$DEB" "$WORK/debian-binary" "$WORK/control.tar.gz" "$WORK/data.tar.gz" <<'PY'
-import sys, time
-
-def field(b, n):
-    return b + b" " * (n - len(b))
-
-def member(name, data):
-    hdr  = field(name.encode(), 16)
-    hdr += field(b"%d" % int(time.time()), 12)
-    hdr += field(b"0", 6)          # uid
-    hdr += field(b"0", 6)          # gid
-    hdr += field(b"100644", 8)     # mode
-    hdr += field(b"%d" % len(data), 10)
-    hdr += b"`\n"
-    body = hdr + data
-    if len(data) % 2:
-        body += b"\n"              # members are padded to even length
-    return body
-
-out = sys.argv[1]
-with open(out, "wb") as f:
-    f.write(b"!<arch>\n")
-    for path in sys.argv[2:]:
-        f.write(member(path.split("/")[-1], open(path, "rb").read()))
-PY
-fi
+# dpkg-deb is the tool for this, and the only one used: it is what any
+# Debian-ish box (or the debian container this belongs in) has.
+dpkg-deb --build --root-owner-group "$ROOT" "$DEB" > /dev/null
+echo "  built with dpkg-deb"
 
 echo "=== built $DEB ==="
 ls -l "$DEB" | awk '{printf "  %s bytes\n", $5}'

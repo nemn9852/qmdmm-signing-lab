@@ -27,7 +27,10 @@ W=/w/verify-rpm
 echo "=== environment ==="
 . /etc/os-release && echo "  $PRETTY_NAME"
 echo "  line: $LINE"
-echo "  dnf: $(dnf --version | head -1)"
+echo "  rpm:  $(rpm --version)"
+echo "  dnf:  $(dnf --version | head -1)"
+echo "  gpg:  $(gpg --version | head -1)"
+echo "  rpm's OpenPGP backend: $(rpm --eval '%_openpgp_sign' 2>/dev/null || echo '<unset>')"
 
 echo
 echo "=== dependencies ==="

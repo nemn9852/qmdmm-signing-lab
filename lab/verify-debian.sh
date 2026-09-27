@@ -132,27 +132,34 @@ echo "=============================================================="
 KEYRING_SRC="$PAGES/$LINE-keyring"
 fetch "$KEYRING_SRC/dists/$SUITE/main/binary-all/Packages" "$W/keyring-index"
 DEBPATH=$(awk '/^Filename:/{print $2; exit}' "$W/keyring-index")
-echo "  package: $DEBPATH"
-fetch "$KEYRING_SRC/$DEBPATH" "$W/keyring.deb"
 
-if ! dpkg -i "$W/keyring.deb" > /tmp/dpkg.log 2>&1; then
-  echo "  !! dpkg -i failed"; tail -15 /tmp/dpkg.log | sed 's/^/    /'; exit 1
+if [ -z "$DEBPATH" ]; then
+  echo "  SKIPPED: the keyring source publishes no package yet, so this cell"
+  echo "  cannot say anything about the one-package-configures-both shape."
+  echo "  (Building the package needs dpkg-deb - see lab/mkkeyring-deb.sh.)"
+else
+  echo "  package: $DEBPATH"
+  fetch "$KEYRING_SRC/$DEBPATH" "$W/keyring.deb"
+
+  if ! dpkg -i "$W/keyring.deb" > /tmp/dpkg.log 2>&1; then
+    echo "  !! dpkg -i failed"; tail -15 /tmp/dpkg.log | sed 's/^/    /'; exit 1
+  fi
+  echo "  --- what it dropped ---"
+  ls -l /usr/share/keyrings/qmdmm-*.gpg /etc/apt/sources.list.d/qmdmm.sources 2>&1 | sed 's/^/    /'
+  echo "  --- the sources it wrote ---"
+  sed 's/^/    /' /etc/apt/sources.list.d/qmdmm.sources
+
+  # Keep the assertion about OUR sources: move the distro's own list aside.
+  find /etc/apt/sources.list.d -maxdepth 1 -name 'debian.sources' -exec mv {} /tmp/debian.sources.off \; 2>/dev/null || true
+  rm -rf /var/lib/apt/lists/*
+  echo "  --- now a plain apt-get update, no -o overrides ---"
+  set +e
+  out=$(apt-get update 2>&1); rc=$?
+  set -e
+  echo "$out" | grep -E '^(Err|E:|W:|Get|Hit)' | sed 's/^/    /' || true
+  if [ $rc -eq 0 ]; then echo "    => PASS: both sources accepted straight out of the box"
+  else echo "    => FAIL: a consumer that installed the keyring package still cannot update"; exit 1; fi
 fi
-echo "  --- what it dropped ---"
-ls -l /usr/share/keyrings/qmdmm-*.gpg /etc/apt/sources.list.d/qmdmm.sources 2>&1 | sed 's/^/    /'
-echo "  --- the sources it wrote ---"
-sed 's/^/    /' /etc/apt/sources.list.d/qmdmm.sources
-
-# Keep the assertion about OUR sources: move the distro's own list aside.
-find /etc/apt/sources.list.d -maxdepth 1 -name 'debian.sources' -exec mv {} /tmp/debian.sources.off \; 2>/dev/null || true
-rm -rf /var/lib/apt/lists/*
-echo "  --- now a plain apt-get update, no -o overrides ---"
-set +e
-out=$(apt-get update 2>&1); rc=$?
-set -e
-echo "$out" | grep -E '^(Err|E:|W:|Get|Hit)' | sed 's/^/    /' || true
-if [ $rc -eq 0 ]; then echo "    => PASS: both sources accepted straight out of the box"
-else echo "    => FAIL: a consumer that installed the keyring package still cannot update"; exit 1; fi
 
 echo
 echo "=============================================================="

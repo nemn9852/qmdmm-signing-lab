@@ -89,6 +89,21 @@ if [ -n "$RPM" ]; then
   if ! rpmsign --addsign --define "_gpg_name ${SUB_FPR}" "$RPM" 2>&1 | sed 's/^/  /'; then
     echo "  !! rpmsign failed"; exit 1
   fi
+
+  echo
+  echo "=== can this distro's own rpm read the signature it just made? ==="
+  # rpm plus EdDSA has a history of "signs fine, verifies BAD". Ask rpm rather
+  # than assume - report only, the consumer-side verdict is the verify job's job.
+  gpg --batch --armor --export "${SUB_FPR}!" > /tmp/pub.asc
+  rpm --import /tmp/pub.asc > /dev/null 2>&1 || true
+  if rpm -Kv "$RPM" > /tmp/rpmk.log 2>&1; then
+    echo "  rpm -K: OK"
+  else
+    echo "  rpm -K: NOT OK"
+  fi
+  grep -iE 'signature|digest' /tmp/rpmk.log 2>/dev/null | head -4 | sed 's/^/    /' || true
+  rpm -qp --qf '  rpm reads the signature as: %{SIGPGP:pgpsig}%{RSAHEADER:pgpsig}\n' "$RPM" 2>/dev/null || true
+
   cp "$RPM" "$OUT/"
 fi
 
