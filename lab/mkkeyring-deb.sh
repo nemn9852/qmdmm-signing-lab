@@ -22,6 +22,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."                      # -> repo/
 source "$HOME/qmdmm-signing-lab/env.sh"      # GNUPGHOME
+source lab/lib-tools.sh                      # md5_of
 
 DISTRO="${1:?usage: mkkeyring-deb.sh <distro> <pages-base> [version]}"
 BASE="${2:?usage: mkkeyring-deb.sh <distro> <pages-base> [version]}"
@@ -69,25 +70,30 @@ EOF
 
 # md5sums, as a package should have
 ( cd "$ROOT" && find . -type f ! -path './DEBIAN/*' | sed 's|^\./||' | sort | \
-  while read -r f; do printf '%s  %s\n' "$(md5 -q "$f" 2>/dev/null || md5sum "$f" | cut -d' ' -f1)" "$f"; done \
+  while read -r f; do printf '%s  %s\n' "$(md5_of "$f")" "$f"; done \
 ) > "$ROOT/DEBIAN/md5sums"
-
-# .deb = ar archive of debian-binary, control.tar.gz, data.tar.gz.
-# There is no dpkg-deb here, so build it with tar and ar.
-( cd "$ROOT/DEBIAN" && tar --uid 0 --gid 0 --uname root --gname root -czf "$WORK/control.tar.gz" . )
-( cd "$ROOT" && tar --uid 0 --gid 0 --uname root --gname root --exclude ./DEBIAN \
-    -czf "$WORK/data.tar.gz" . )
-printf '2.0\n' > "$WORK/debian-binary"
 
 POOL="site/$DISTRO-keyring/pool/main/q/$PKG"
 mkdir -p "$POOL"
 rm -f "$POOL"/*.deb
 DEB="$(cd "$POOL" && pwd)/${PKG}_${VERSION}_all.deb"
 
-# A .deb is an ar archive. macOS's ar is a Mach-O archiver (it injects a
-# __.SYMDEF member and mangles this), and there is no dpkg-deb here, so write
-# the ar container directly - the format is 60 bytes of header per member.
-python3 - "$DEB" "$WORK/debian-binary" "$WORK/control.tar.gz" "$WORK/data.tar.gz" <<'PY'
+# A .deb is an ar archive holding debian-binary, control.tar.gz and data.tar.gz.
+#
+# Use dpkg-deb when it exists: that is what any Debian-ish box has, and what the
+# real pipeline will run on. The fallback below only exists because this lab is
+# driven from a Mac - macOS has no dpkg-deb, and its ar is a Mach-O archiver
+# that would produce a broken container.
+if command -v dpkg-deb >/dev/null 2>&1; then
+  dpkg-deb --build --root-owner-group "$ROOT" "$DEB" > /dev/null
+  echo "  built with dpkg-deb"
+else
+  echo "  no dpkg-deb here (a Mac) - writing the ar container directly"
+  ( cd "$ROOT/DEBIAN" && tar --uid 0 --gid 0 --uname root --gname root -czf "$WORK/control.tar.gz" . )
+  ( cd "$ROOT" && tar --uid 0 --gid 0 --uname root --gname root --exclude ./DEBIAN \
+      -czf "$WORK/data.tar.gz" . )
+  printf '2.0\n' > "$WORK/debian-binary"
+  python3 - "$DEB" "$WORK/debian-binary" "$WORK/control.tar.gz" "$WORK/data.tar.gz" <<'PY'
 import sys, time
 
 def field(b, n):
@@ -111,8 +117,8 @@ with open(out, "wb") as f:
     f.write(b"!<arch>\n")
     for path in sys.argv[2:]:
         f.write(member(path.split("/")[-1], open(path, "rb").read()))
-print("wrote", out)
 PY
+fi
 
 echo "=== built $DEB ==="
 ls -l "$DEB" | awk '{printf "  %s bytes\n", $5}'

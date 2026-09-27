@@ -12,10 +12,12 @@
 # waits for the site to actually serve that commit before asserting anything.
 
 wait_for_publish() {
-  local pages="$1" expect="$2" got="" i
+  local pages="$1" expect="$2" got="" raw="" i
   for i in $(seq 1 60); do
-    got=$(curl -fsSL --max-time 15 "$pages/publish.json" 2>/dev/null \
-          | tr -d ' \n' | sed -n 's/.*"sha":"\([0-9a-f]*\)".*/\1/p')
+    # curl exits 22 on an HTTP error; under `set -e` that would kill the
+    # script, so swallow it and treat "no answer" as "not yet".
+    raw=$(curl -fsSL --max-time 15 "$pages/publish.json" 2>/dev/null || true)
+    got=$(printf '%s' "$raw" | tr -d ' \n' | sed -n 's/.*"sha":"\([0-9a-f]*\)".*/\1/p')
     if [ "$got" = "$expect" ]; then
       echo "  site is live at ${got:0:7} (waited ${i} poll(s))"
       return 0

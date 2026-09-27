@@ -20,16 +20,12 @@ DESC="${4:-QMdmm signing lab apt repository}"
 
 cd "$(dirname "$0")/.."                      # -> repo/
 source "$HOME/qmdmm-signing-lab/env.sh"      # GNUPGHOME
+source lab/lib-tools.sh                      # md5_of / sha_of / deb_control
 
 D="$OUT/dists/$SUITE"
 ARCHDIR="$D/main/binary-all"
 
 echo "=== building $OUT (suite $SUITE) with key $KEY ==="
-
-# apt wants per-file checksums in Release; there is no apt-ftparchive here, so
-# compute them. md5/shasum keep this portable to macOS.
-md5_of() { md5 -q "$1" 2>/dev/null || md5sum "$1" | cut -d' ' -f1; }
-sha_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
 
 mkdir -p "$ARCHDIR"
 # If the repo carries packages in pool/, describe them for real (control is
@@ -38,27 +34,7 @@ mkdir -p "$ARCHDIR"
 found=0
 while IFS= read -r deb; do
   rel="${deb#"$OUT"/}"
-  # Read control straight out of the .deb. No dpkg-deb here, and macOS's ar is
-  # a Mach-O archiver, so parse the ar container ourselves.
-  ctrl=$(python3 - "$deb" <<'PY'
-import sys, io, tarfile
-d = open(sys.argv[1], "rb").read()
-if d[:8] == b"!<arch>\n":
-    i = 8
-    while i + 60 <= len(d):
-        hdr = d[i:i+60]
-        name = hdr[0:16].decode(errors="replace").strip()
-        size = int(hdr[48:58].decode().strip() or 0)
-        body = d[i+60:i+60+size]
-        if name.startswith("control.tar"):
-            with tarfile.open(fileobj=io.BytesIO(body)) as tf:
-                for m in tf.getmembers():
-                    if m.name.lstrip("./") == "control":
-                        sys.stdout.write(tf.extractfile(m).read().decode())
-            break
-        i += 60 + size + (size % 2)
-PY
-)
+  ctrl=$(deb_control "$deb")
   printf '%s\n' "$ctrl" | grep -v '^$'
   printf 'Filename: %s\n' "$rel"
   printf 'Size: %s\n' "$(wc -c < "$deb" | tr -d ' ')"

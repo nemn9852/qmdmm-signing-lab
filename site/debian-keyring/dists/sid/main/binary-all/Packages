@@ -9,7 +9,7 @@ Description: QMdmm archive signing keys and repository configuration
  subkey, and the sources.list.d entries for both the keyring source
  and the day-to-day source. Installing it configures both repos.
 Filename: pool/main/q/qmdmm-archive-keyring/qmdmm-archive-keyring_2026.09.27.1_all.deb
-Size: 3118
-MD5sum: 1c938c67ac6bf672ec176d237417fe8a
-SHA256: 4dbc666580d4640fa3eea785a20f502afa19c28a4f9665868f01c24aabefe6d6
+Size: 3122
+MD5sum: 2190c71cfd50e08c09864327725b7234
+SHA256: cd0a8b1664a2724769174b8227c2244f61cb405262e1091c9a734e11c6a730d3
 

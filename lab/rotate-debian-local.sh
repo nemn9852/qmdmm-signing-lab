@@ -79,6 +79,12 @@ echo "  wrote $LAB/priv-$DISTRO.b64 ($(wc -c < "$LAB/priv-$DISTRO.b64" | tr -d '
 echo "  upload: gh secret set SIGNING_KEY --repo $LAB_REPO --env $DISTRO < $LAB/priv-$DISTRO.b64"
 
 # keep env.sh pointing at the live subkey so the next run rotates the right one
-sed -i '' "s|^export SUB_${DISTRO^^}=.*|export SUB_${DISTRO^^}=$NEW_SUB|" "$LAB/env.sh"
+# (GNU sed takes -i bare; BSD/macOS sed needs -i '' - detect instead of
+#  hard-coding the Mac flavour)
+if sed --version >/dev/null 2>&1; then
+  sed -i  "s|^export SUB_${DISTRO^^}=.*|export SUB_${DISTRO^^}=$NEW_SUB|" "$LAB/env.sh"
+else
+  sed -i '' "s|^export SUB_${DISTRO^^}=.*|export SUB_${DISTRO^^}=$NEW_SUB|" "$LAB/env.sh"
+fi
 echo
 echo "NEW_SUB=$NEW_SUB"
