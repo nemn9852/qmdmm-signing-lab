@@ -380,3 +380,47 @@ jobs:
             -e LAB_PAGES="$LAB_PAGES" \
             -e EXPECT_SHA="${{ github.sha }}" \
             rockylinux/rockylinux:10 bash /w/lab/probe-inversion-control.sh
+
+  # Is the fedora:43 repomd rejection a 43-only bug, or the shape of things to
+  # come? Same probe, four fedora generations, so the answer is a version table
+  # rather than a guess. A tag that does not exist fails with 'manifest unknown',
+  # which is also an answer.
+  probe-fedora-versions:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["fedora:43", "fedora:44", "fedora:45", "fedora:rawhide"]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Probe ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/w" -w /w \
+            -e LINE="${{ matrix.image }}" -e ALGO=ed25519 \
+            "${{ matrix.image }}" bash /w/lab/probe-rpm-verify.sh
+
+  # Companion to probe-fedora-versions: is the rejection about the toolchain, or
+  # about the lab handing dnf a file:// key where a real consumer writes a URL?
+  probe-rpm-https-key:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: [publish]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: fedora, image: "fedora:43" }
+          - { line: rocky,  image: "rockylinux/rockylinux:10" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Probe key source on ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/w" -w /w \
+            -e LAB_PAGES="$LAB_PAGES" -e EXPECT_SHA="${{ github.sha }}" \
+            -e LINE="${{ matrix.line }}" \
+            "${{ matrix.image }}" bash /w/lab/probe-rpm-https-key.sh
