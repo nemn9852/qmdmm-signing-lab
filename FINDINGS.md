@@ -160,29 +160,41 @@ container, with the same throwaway key:
 
 So **it is neither the algorithm nor the subkey**: switching to RSA does not buy
 anything here. dnf5 on fedora:43 is not obtaining the key from `gpgkey=` at all.
-Binary and armored `gpgkey=` both fail; giving it `rpm --import` first does not
-help either.
+Binary and armored `gpgkey=` both fail.
 
-What the two systems print while trying is the useful part:
+What fedora prints while trying is the useful part, and so is what it does not:
 
 ```
-fedora:43                      rocky:10
-Importing OpenPGP key 0x64947284:      Importing GPG key 0xE762F939:
-  (no Userid line)                       Userid: "keyimport probe <ki@example.invalid>"
->>> repomd.xml GPG signature
-    verification error:
-    Signing key not found              ok
+>>> repomd.xml GPG signature verification error: Signing key not found
+Importing OpenPGP key 0x64947284:
+    keyring: /tmp/keyimport/cache-binary-gpgkey/lab-1418142b151577d0/pubring (0B)
+rpmdb keys: gpg-pubkey-c6e7f081cf80e13146676e88829b606631645531-66b6dccf
 ```
 
-**The same key is reported under a different keyid by the two systems**, and on
-fedora the import never gets far enough to print a Userid. That points at the
-keyid representation: rpm 6 / dnf5 speak OpenPGP v6, while the key here is a v4
-key produced by gpg 2.4.9.
+dnf5 creates its per-repo keyring and then imports **nothing** into it — 0 bytes
+— while announcing an import. That is the failure, and `Signing key not found`
+is the honest consequence.
 
-*Stated as inference, not fact:* this run does not prove the v4/v6 mismatch is
-the cause, only that the failure is independent of algorithm, of subkey-vs-
-primary, and of how `gpgkey=` is spelled. Worth knowing before someone spends a
-day regenerating keys as RSA hoping it fixes fedora.
+**Correction (this document previously claimed something false here).** An
+earlier revision said "the same key is reported under a different keyid by the
+two systems" — fedora `0x64947284` vs rocky `0xE762F939` — and inferred an
+OpenPGP v6-vs-v4 keyid mismatch from it. That was wrong: this probe generates a
+**throwaway key inside each container**, so fedora and rocky necessarily work on
+different keys. The two fingerprints were read back and they are, indeed, that
+probe's own keys:
+
+```
+fedora:43  root = 9E84FC1D5CC3AB463F9B0DFFE7C5A6AF64947284   -> "0x64947284"
+rocky:10   root = B8BC55DBA7263BF85F85DEC2390773D1E762F939   -> "0xE762F939"
+```
+
+Each system was printing the tail of its own key. There is no cross-system keyid
+discrepancy to explain, and **no v6/v4 finding here at all**.
+
+(Related, same revision: it also said the `rpm --import` variants "do not help
+either". Those two variations were never run — `set -e` plus a failure inside
+the third `attempt` killed the job after variation 2. The probe is now written
+without `set -e` and reports all four; see below.)
 
 Consequences for the real scheme:
 
