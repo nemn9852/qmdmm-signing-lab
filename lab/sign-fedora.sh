@@ -31,7 +31,9 @@ echo "  dnf: $(dnf --version | head -1)"
 
 echo
 echo "=== dependencies ==="
-dnf install -y -q gnupg2 rpm-build createrepo_c zstd </dev/null
+# rpmsign lives in rpm-sign, not in rpm-build (and createrepo_c does not sign
+# anything by itself - the metadata signature is a plain gpg --detach-sign).
+dnf install -y -q gnupg2 rpm-sign createrepo_c zstd </dev/null
 
 echo
 echo "=== import subkey from stdin ==="
@@ -57,7 +59,6 @@ echo "=== fetch a real, throwaway rpm to sign ==="
 # rpmbuild on a trivial spec trips over Fedora's check-buildroot here, and the
 # lab does not need a package we built ourselves - signing a real one that dnf
 # just fetched is a better match for what the pipeline actually does.
-dnf install -y -q dnf-plugins-core </dev/null || true
 rm -rf /tmp/rpms; mkdir -p /tmp/rpms
 dnf download --destdir /tmp/rpms tree </dev/null
 RPM=$(ls /tmp/rpms/*.rpm 2>/dev/null | head -1 || true)
