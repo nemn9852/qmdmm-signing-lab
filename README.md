@@ -20,7 +20,7 @@ something to start on every push.
 |---|---|---|---|
 | **A** pack | `stage-a-pack` × 12 | no | QMdmmPackagingCi's *own* `pack-<fmt>.sh` builds real packages inside the row's own distribution image |
 | **S** sign | `stage-s-sign` × 12 | **yes**, one per line | the row's subkey signs the repository it just built — and the root secret is *not* usable in that container |
-| **B** consume | `stage-b-consume` × 12, `stage-b-keyring`, `stage-b-keyring-package`, `stage-b-revoked` × 2, `stage-b-rotated` × 3 | no | a real consumer, holding no secret, establishes trust the way a user does and then installs from the published repository; the root key alone would not have been enough; a revoked key does not stop every consumer; and a **rotation** costs an un-refreshed consumer the repository outright |
+| **B** consume | `stage-b-consume` × 12, `stage-b-keyring`, `stage-b-keyring-package`, `stage-b-revoked` × 2, `stage-b-rotated` × 3 | no | a real consumer, holding no secret, establishes trust the way a user does and then installs from the published repository; the root key alone would not have been enough; a revoked key does not stop every consumer; and a **rotation** costs an un-refreshed consumer the repository outright — with the rpm cells also measuring which key file the rotated line should publish |
 | **C** taint | `stage-c-taint` × 4 | no | tampering with published metadata is detected — with the *untouched* copy as a control |
 | publish | `publish` | no | the site assembled on gh-pages **is** the repository layout |
 
@@ -138,7 +138,14 @@ keys/   published public keys
   <line>/qmdmm-packages-before.gpg  the same line, as it looked before its rotation —
                                   i.e. what a consumer that has NOT refreshed holds.
                                   A fixture, not something to hand anyone.
-  fingerprints.txt
+  <line>/qmdmm-packages-pruned.gpg  the same line with the outgoing (revoked)
+                                  subkey dropped — what a rotated line could
+                                  publish instead. Not handed to anyone either:
+                                  it exists so the choice can be measured
+                                  (FINDINGS 10.9).
+  fingerprints.txt                the list the site's front page shows. Names
+                                  each line's CURRENT subkey; a rotated line's
+                                  key *file* is bigger than its row here.
 site/   material that must be built OFF-CI, staged at its published path
   debian-keyring/                 the root-signed keyring source, which now ships
                                   qmdmm-archive-keyring
@@ -156,7 +163,15 @@ lab/    the scripts — all reusable, all English
                                   verifier (FINDINGS 10.7)
   consume-rotated-{dnf,pacman}.sh stage B, what a ROTATION does to a consumer
                                   (FINDINGS 10.9): four corners, two of which no
-                                  revocation test can reach
+                                  revocation test can reach. The dnf one also
+                                  runs the counterfactual — the same key file
+                                  with the revoked subkey dropped — because on
+                                  rpm that is the difference between a closed
+                                  and an open leak window.
+  check-fingerprints.sh           assert keys/fingerprints.txt names each
+                                  line's current subkey. A gate, not a probe:
+                                  the publish job puts that list on the site
+                                  and a stale entry advertises a revoked key
   taint-repo.sh                   stage C, tampering must be detected
   mkrepo-debian.sh                build + sign a minimal apt tree (off-CI)
   mkrepo-revoked-{rpm,pac}.sh     build the revoked-key fixtures — in CI, because
@@ -201,7 +216,14 @@ The rotation, in order, and steps 1 and 2 are the ones that cannot be undone:
 4. re-sign what only the root key may sign. For the deb lines that is the keyring
    source. For the rpm and pacman lines there is no such artifact in this lab, so
    the step is **absent and says so** rather than being skipped in silence;
-5. re-export the line's public key file as root + outgoing[revoked] + incoming;
+5. re-export the line's public key file as root + outgoing[revoked] + incoming —
+   and, alongside it, `-pruned.gpg`: the same key file with the outgoing subkey
+   dropped. Which of the two a line should publish is a measured question rather
+   than a preference: on rpm the revoked subkey's presence in the file is what
+   keeps it able to sign (FINDINGS 10.9);
+5b. rewrite that line's row in `keys/fingerprints.txt`, so the list the site
+   shows names the incoming subkey. `lab/check-fingerprints.sh` is the gate that
+   catches it if this is ever skipped;
 6. write the incoming subkey's secret.
 
 Step 6 does not finish the job. Until the secret is uploaded to that line's

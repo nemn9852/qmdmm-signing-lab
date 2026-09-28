@@ -32,9 +32,16 @@
 #      *-release / keyring packages are a mechanism that does not exist in this
 #      lab), so for them this step is ABSENT and says so, rather than being
 #      skipped in silence.
-#   5. re-export the line's public key file: root + outgoing[revoked] + incoming.
+#   5. re-export the line's public key file: root + outgoing[revoked] + incoming,
+#      plus the pruned variant of it - the same file with the outgoing subkey
+#      dropped, which is what consume-rotated-dnf.sh measures corner 3 against.
 #      Carrying the revoked subkey is deliberate - it is what lets a consumer
-#      that HAS refreshed report "revoked" rather than "unknown key".
+#      that HAS refreshed report "revoked" rather than "unknown key" - and on
+#      rpm that courtesy is exactly what keeps the compromised key signing, so
+#      both files are published and the measurement decides which one to hand
+#      out (FINDINGS 10.9).
+#   5b. rewrite this line's row in keys/fingerprints.txt, the list the publish
+#      job puts on the front page of the site.
 #   6. write the incoming subkey's secret for the CI environment.
 #
 # NOT part of this script, and the rotation is not finished without it:
@@ -182,6 +189,43 @@ gotlive=$(gpg --with-colons --show-keys "$PKGFILE" 2>/dev/null \
 echo "  $PKGFILE: $after_live live, $after_dead revoked; the live one is $gotlive"
 [ "$after_live" = 1 ] && [ "$after_dead" = 1 ] && [ "$gotlive" = "$NEW_SUB" ] \
   || { echo "  !! the key file is not root + outgoing[revoked] + incoming"; exit 1; }
+
+# And the counterfactual: what a consumer would be handed if the outgoing subkey
+# were DROPPED rather than carried. It exists because on rpm carrying it is not
+# a courtesy - it is what keeps the compromised subkey able to sign (FINDINGS
+# 10.9), and "stop carrying it" is a recommendation about a published artifact,
+# so it should rest on a reading rather than on an inference from two others.
+PRUNED="keys/$DISTRO/qmdmm-packages-pruned.gpg"
+gpg --batch --armor --export "$ROOT!" "${NEW_SUB}!" > "$LAB/pub-$DISTRO-pruned.asc"
+gpg --dearmor < "$LAB/pub-$DISTRO-pruned.asc" > "$PRUNED"
+rm -f "$LAB/pub-$DISTRO-pruned.asc"
+pruned_live=$(gpg --with-colons --show-keys "$PRUNED" 2>/dev/null \
+              | awk -F: '/^sub:/{if ($2 !~ /^[redi]$/) n++} END{print n+0}')
+pruned_dead=$(gpg --with-colons --show-keys "$PRUNED" 2>/dev/null \
+              | awk -F: '/^sub:/{if ($2 ~ /^[redi]$/) n++} END{print n+0}')
+echo "  $PRUNED: $pruned_live live, $pruned_dead revoked (the outgoing one dropped)"
+[ "$pruned_live" = 1 ] && [ "$pruned_dead" = 0 ] \
+  || { echo "  !! the pruned key file is not root + incoming"; exit 1; }
+
+# ------------------------------------------------------------------ step 5b
+echo
+echo "=== 5b) point the published fingerprint list at the incoming subkey ==="
+# keys/fingerprints.txt is hand-maintained, and the publish job pastes it onto
+# the front page of the site. The first three rotations left it naming the
+# outgoing subkey, so the site went on advertising the key that had just been
+# revoked as that line's operational one - with the current one sitting in the
+# key file right next to it. Rotating it here is what keeps
+# lab/check-fingerprints.sh green; that check is the gate, this is the reason it
+# never has to be red first.
+group20() { printf '%s' "$1" | sed -E 's/(....)/\1 /g; s/ $//'; }
+NEWROW=$(printf '  %-8s%s  %s' "$DISTRO" \
+           "$(group20 "${NEW_SUB:0:20}")" "$(group20 "${NEW_SUB:20}")")
+sed -i '' "s|^  $DISTRO  *[0-9A-F ]*\$|$NEWROW|" keys/fingerprints.txt
+# Read back rather than trusting sed's exit status: a pattern that matched
+# nothing also exits 0.
+grep -qF "$(group20 "${NEW_SUB:0:20}")" keys/fingerprints.txt \
+  || { echo "  !! keys/fingerprints.txt did not take the new subkey"; exit 1; }
+echo "  keys/fingerprints.txt: $NEWROW"
 
 # ------------------------------------------------------------------ step 6
 echo

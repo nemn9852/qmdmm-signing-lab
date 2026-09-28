@@ -25,6 +25,21 @@
 # cost of the rotation; corner 4 is what makes it a rotation rather than an
 # outage.
 #
+# The pruned key file - root + incoming, the outgoing subkey dropped - is NOT
+# consumed here, and that is a scope decision rather than an oversight. It is
+# what consume-rotated-dnf.sh needs it for on rpm, because there corner 3 is the
+# unexpected reading (accepted) and "carrying the revoked subkey is what keeps
+# it alive" would otherwise be an inference. Here corner 3 is refused, and it is
+# already attributable: this script asserts that the keyring stopped considering
+# the outgoing subkey usable, and the two refusals pacman produces are visibly
+# different - reading 2 names a key it does not have ("key ... is unknown"),
+# reading 3 a signature it will not accept ("signature from ... is invalid").
+# So on pacman the removed subkey would change the diagnosis and not the
+# verdict, and it is not reachable in this sequence anyway: trust here is one
+# global keyring that cannot be un-taught a revocation certificate (FINDINGS 6),
+# so the counterfactual would need a second keyring - i.e. a consumer that never
+# existed in this sequence - to be measured at all.
+#
 #   env: PAGES, LINE, VERSION, EXPECT_SHA
 set -euo pipefail
 
@@ -159,6 +174,10 @@ read_one() {
 fail() { echo "  !! $1"; exit 1; }
 
 # expected <tag> <wanted> <why>
+#
+# Printed as "reading <tag>": the diagram at the top has four corners, and the
+# tag names the reading that was taken, not the cell it belongs to. Kept in step
+# with consume-rotated-dnf.sh, its counterpart.
 expected() {
   local got
   got=$(cat "$W/$1.verdict" 2>/dev/null || true)
@@ -169,7 +188,7 @@ expected() {
     *) fail "no verdict was recorded for '$1' - the reading did not finish" ;;
   esac
   [ "$got" = "$2" ] || fail "expected '$2', got '$got': $3"
-  echo "  corner $1: $got, as required"
+  echo "  reading $1: $got, as required"
 }
 
 echo

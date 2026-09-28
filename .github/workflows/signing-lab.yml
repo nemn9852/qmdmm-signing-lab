@@ -22,7 +22,10 @@ name: signing-lab
 #              Three cells at the end of B ask the two questions a key that
 #              leaked raises rather than the one a normal run raises: what a
 #              consumer does with a key that has since been revoked, and what a
-#              rotation costs it. Each is a control pair, not a single reading.
+#              rotation costs it. Each is a control pair, not a single reading,
+#              and the rotation cells go one step further: they also measure
+#              which of the two key files a rotated line could publish, because
+#              on rpm the one that carries the revoked subkey keeps it signing.
 #   C taint    tamper with one metadata file in a local copy of a published
 #              repository and prove the same consumer refuses it. One cell per
 #              (format, consumer) pair, with the untouched copy as a control.
@@ -228,6 +231,15 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
+      - name: Check the fingerprint list against the keys it lists
+        run: |
+          set -euo pipefail
+          # The list goes on the front page of the site, and it is hand-
+          # maintained, so a line whose subkey was rotated and whose row was not
+          # edited would advertise the revoked key as that line's operational
+          # one. That happened three times before anyone looked (FINDINGS 10.9),
+          # so it is checked at the moment it becomes public.
+          bash "$PWD/lab/check-fingerprints.sh"
       - name: Assemble the site
         run: |
           set -euo pipefail
@@ -515,6 +527,14 @@ jobs:
   #   - a consumer that HAS refreshed, and therefore holds the certificate, is
   #     handed the OLD source - and on rpm that is accepted (FINDINGS 10.7, here
   #     re-measured with a real rotated line key).
+  #
+  # The rpm cells then take it one step further, because that second reading is
+  # the surprising one: they run the same two sources against a THIRD key file -
+  # the rotated one with the outgoing subkey dropped - which is what turns "the
+  # revoked subkey's presence is what keeps it signing" from an inference into a
+  # reading, and what makes "publish the rotated file without it" a recommendation
+  # with a measurement behind it (FINDINGS 10.9). The pacman cell says in its
+  # header why that counterfactual is not taken there.
   #
   # One cell per (format, verifier implementation), the same axis stage C uses:
   # dnf5 on fedora, dnf4 on rocky, pacman on arch. The other four lines share a
