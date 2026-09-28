@@ -8,7 +8,7 @@
 # exactly one package, `qmdmm-archive-keyring`, and installing it is supposed to
 # leave two working sources behind. Nothing else in CI installs it, so without
 # this cell the claim "install the package and you are set up" has no witness at
-# all (FINDINGS 10.7).
+# all (FINDINGS 10.8).
 #
 #   env: PAGES, ROOT_FPR, EXPECT_SHA
 #

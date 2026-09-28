@@ -3,9 +3,9 @@
 # Stage B for the rpm format: DOES dnf refuse metadata signed by a key that has
 # since been revoked?
 #
-# Answer: **no**. FINDINGS 10.8 is the measurement; this script is how it was
+# Answer: **no**. FINDINGS 10.7 is the measurement; this script is how it was
 # made. FINDINGS 3.1 recorded that revocation is only as good as the verifier,
-# and 10.7 recorded that this lab had demonstrated it against `gpgv` (apt's
+# and 10.8 recorded that this lab had demonstrated it against `gpgv` (apt's
 # backend) and measured nothing for dnf or pacman. This cell measures dnf, and
 # the answer is that the revocation certificate is not consulted on this path.
 #
@@ -107,11 +107,11 @@ sed 's/^/    /' "$W/b.log"
 #
 # The assertion is therefore inverted on purpose, the way fedora:43 was handled:
 # the day dnf starts checking revocation, this goes red and whoever reads it
-# learns that FINDINGS 10.8 needs revisiting. A cell asserting "dnf refuses it"
+# learns that FINDINGS 10.7 needs revisiting. A cell asserting "dnf refuses it"
 # would have been red forever, and would have been read as a broken fixture.
 if ! grep -q 'Metadata cache created' "$W/b.log"; then
   echo "  !! dnf did NOT accept the revoked-key metadata - it now checks revocation,"
-  echo "     so FINDINGS 10.8 is out of date and this cell should be flipped back"
+  echo "     so FINDINGS 10.7 is out of date and this cell should be flipped back"
   exit 1
 fi
 if grep -qiE 'signature verification error|Bad PGP signature|Signing key not found' "$W/b.log"; then
@@ -119,7 +119,7 @@ if grep -qiE 'signature verification error|Bad PGP signature|Signing key not fou
   exit 1
 fi
 echo "  OK: dnf accepted it, exactly as it accepted the control"
-echo "      -> revocation is NOT enforced by this consumer (FINDINGS 10.8)"
+echo "      -> revocation is NOT enforced by this consumer (FINDINGS 10.7)"
 
 echo
 echo "=== B/revoked (rpm, dnf): PASS ==="

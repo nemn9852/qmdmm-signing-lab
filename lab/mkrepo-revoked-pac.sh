@@ -2,7 +2,7 @@
 #
 # Build a tiny pacman repository whose database is signed by a key that HAS
 # SINCE BEEN REVOKED. The pacman counterpart of `site/debian-revoked`, and the
-# remaining format after the rpm one (FINDINGS 10.7).
+# remaining format after the rpm one (FINDINGS 10.8).
 #
 # Same reasoning as the rpm fixture: the signature must be made before the
 # revocation, the private half lives only in the `fixture` environment, and the

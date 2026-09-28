@@ -633,7 +633,7 @@ Checked rather than assumed, because a job that skips its work is also green:
   The human-readable line says **Good signature**. The status stream says
   `REVKEYSIG`. An assertion built on the first would have passed.
 
-## 10.8 Revocation, measured: three verifiers, three answers
+### 10.7 Revocation, measured: three verifiers, three answers
 
 3.1 said revocation is only as good as the verifier, having noticed that `gpg
 --verify` and `sqv` disagree. That was one pair. The same question has now been
@@ -666,7 +666,7 @@ does not check revocation.
 the revoked key, without complaint. The refusal comes later, at the database. So
 for pacman too, the trust-granting step is not where revocation is noticed.
 
-### 10.8.1 The rpm half was green for the wrong reason first
+### 10.7.1 The rpm half was green for the wrong reason first
 
 Recorded because it is §3.12's family and would otherwise have been invisible.
 
@@ -681,12 +681,12 @@ anything about the signature - turned it red on the next run and produced the
 table above. An empty fixture needs an assertion about the *mechanism*, because
 the packages are absent by construction.
 
-### 10.9 What this lab still does **not** cover
+### 10.8 What this lab still does **not** cover
 
 Written down because an unverified thing that is not labelled as unverified tends
 to be read as a verified one.
 
-- **Rotating a line's subkey has only ever been done on debian.** §10.8 measures
+- **Rotating a line's subkey has only ever been done on debian.** §10.7 measures
   what revocation *does* on all three formats, but with a separate fixture key
   rather than a rotated line key. The operation itself -
   `rotate-debian-local.sh`, whose `case` accepts `debian` and nothing else - has

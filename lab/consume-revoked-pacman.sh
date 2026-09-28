@@ -3,7 +3,7 @@
 # Stage B for the pacman format: does pacman refuse a database signed by a key
 # that has since been revoked?
 #
-# The other half of FINDINGS 10.7. pacman grants trust out of band with
+# The other half of FINDINGS 10.8. pacman grants trust out of band with
 # `pacman-key --lsign-key` rather than through a gpgkey= line, so the control
 # here is built differently from the dnf one - but the same discipline applies:
 # ONE artifact, ONE repository configuration, and the only difference between

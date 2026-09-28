@@ -16,15 +16,47 @@ real Qt 6 builds, which is not something to start on every push.
 
 | Stage | Jobs | Declares `environment:` | What it proves |
 |---|---|---|---|
-| **A** pack | `stage-a-pack` × 12 | no | the harness's *own* pack script builds real packages inside the row's own distribution image |
+| **A** pack | `stage-a-pack` × 12 | no | QMdmmPackagingCi's *own* `pack-<fmt>.sh` builds real packages inside the row's own distribution image |
 | **S** sign | `stage-s-sign` × 12 | **yes**, one per line | the row's subkey signs the repository it just built — and the root secret is *not* usable in that container |
-| **B** consume | `stage-b-consume` × 12, `stage-b-keyring` | no | a real consumer, holding no secret, installs from the published repository; and the root key alone would not have been enough |
+| **B** consume | `stage-b-consume` × 12, `stage-b-keyring`, `stage-b-keyring-package`, `stage-b-revoked` × 2 | no | a real consumer, holding no secret, installs from the published repository; and the root key alone would not have been enough |
 | **C** taint | `stage-c-taint` × 4 | no | tampering with published metadata is detected — with the *untouched* copy as a control |
 | publish | `publish` | no | the site assembled on gh-pages **is** the repository layout |
 
 Only `stage-s-sign` declares an environment. That is the whole trick: without
 it `${{ secrets.* }}` expands to empty, so every B and C job sits in exactly a
 consumer's position rather than a rehearsal of one.
+
+## How this relates to QMdmmPackagingCi
+
+Stage A reimplements nothing. It checks out **QMdmm/QMdmmPackagingCi** and runs
+that repository's own `ci/pack-<fmt>.sh` inside the row's distribution image, so
+"does stage A still build real packages" is answered by that repository's script
+rather than by a copy of it. Nothing under `lab/` builds a package.
+
+**The stage letters mean different things in the two repositories.** Read them
+from their own repo:
+
+| | QMdmmPackagingCi | this lab |
+|---|---|---|
+| A | `pack-<fmt>.sh` — builds the packages | the same script, nothing added |
+| B | `runtime-<fmt>.sh` — install the runtime package from a **local tree with the signature question switched off**: `[trusted=yes]` on deb, `gpgcheck=0` on rpm, an unsigned `repo-add` on pac | `consume-<consumer>.sh` — install the runtime package from the **published, subkey-signed repository over HTTPS**, key fetched from Pages |
+| C | `dev-<fmt>.sh` + `build-verify-*` — install the *dev* package, then build a consumer project against it | `taint-repo.sh` — tampering with published metadata is detected |
+
+So that repo's B and this lab's B install the same package and ask different
+questions. That one takes the signature out of the picture so that the answer is
+about the dependency closure; this one puts a signature in and asks whether a
+consumer holding only the published key ends up with a working install. The
+dev-package path — that repo's C, and the heaviest thing it proves — is **not**
+rehearsed here at all.
+
+The order differs too, and deliberately. All three of that repo's stages run
+locally against a local tree; signing is what this lab inserts, and it inserts it
+*between* packing and consuming (A → S → publish → B), because a consumer that
+may only read what was published cannot be staged any earlier.
+
+Where that repo has no counterpart at all, this lab adds the trust chain itself:
+`stage-a-revoked-fixture`, `stage-b-keyring`, `stage-b-keyring-package`,
+`stage-b-revoked`, `stage-c-taint`.
 
 ## Published layout
 
@@ -73,14 +105,21 @@ keys/   published public keys
   <line>/qmdmm-packages.gpg       root + that line's subkey -> the day-to-day Signed-By
   fingerprints.txt
 site/   material that must be built OFF-CI, staged at its published path
-  debian-keyring/                 the root-signed keyring source
+  debian-keyring/                 the root-signed keyring source, which now ships
+                                  qmdmm-archive-keyring
   debian-revoked/                 the revoked-subkey fixture
 lab/    the scripts — all reusable, all English
   sign-repo-{deb,rpm,pac}.sh      stage S, format-level
   consume-{apt,dnf,pacman}.sh     stage B, consumer-level
   consume-apt-keyring.sh          stage B, the half that is built off-CI
+  consume-keyring-package.sh      stage B, install the keyring package and then
+                                  delete every source but the one it configured
+  consume-revoked-{dnf,pacman}.sh stage B, revocation is only as good as the
+                                  verifier (FINDINGS 10.7)
   taint-repo.sh                   stage C, tampering must be detected
   mkrepo-debian.sh                build + sign a minimal apt tree (off-CI)
+  mkrepo-revoked-{rpm,pac}.sh     build the revoked-key fixtures — in CI, because
+                                  the signing key exists only as a secret there
   mkkeyring-deb.sh                build <repo>-archive-keyring (off-CI)
   rotate-debian-local.sh          rotate one line's subkey (off-CI)
   lib-site.sh                     waiting for the deploy, fetching keys, assertions

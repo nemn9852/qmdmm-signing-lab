@@ -2,19 +2,24 @@
 #
 # Build a tiny rpm repository whose repodata is signed by a key that HAS SINCE
 # BEEN REVOKED. This is the rpm counterpart of `site/debian-revoked`, for the
-# formats the debian line cannot speak for (FINDINGS 10.7).
+# formats the debian line cannot speak for (FINDINGS 10.8).
 #
 # Why it is built here instead of being committed: the signature has to be made
 # with the key *before* it is revoked - gpg refuses to sign with a revoked key -
 # and the private half lives only in the `fixture` environment. What is committed
 # is the two public states of that same key (keys/revoked-fixture-before.gpg and
-# keys/revoked-fixture.gpg), so a consumer can be shown both verdicts on one
-# artifact: accepted under the first, REVKEYSIG under the second.
+# keys/revoked-fixture.gpg), so one artifact can be shown to a consumer under
+# both public states of the same key - the pre-revocation export, and the one
+# carrying its revocation certificate.
 #
 # The repository is empty on purpose. What is under test is whether the metadata
 # signature is accepted, not whether packages can be installed, and an empty
-# repository keeps the two apart - with a valid signature dnf lists nothing, with
-# a revoked one it refuses the metadata outright.
+# repository keeps the two apart.
+#
+# This file states no verdict, deliberately. What a consumer does with the revoked
+# state is measured in consume-revoked-dnf.sh, and the rpm answer is not the
+# intuitive one: dnf accepts it (FINDINGS 10.7). An earlier version of this comment
+# asserted the opposite, which is the kind of claim that outlives its measurement.
 #
 #   env: SIGNING_KEY_B64 - base64 of `gpg --armor --export-secret-subkeys "<fpr>!"`
 #                          (the pre-revocation export)

@@ -123,7 +123,7 @@ jobs:
   # ===================== the revocation fixtures =====================
   # Material for the two formats the debian line cannot speak for: a repository
   # signed by a key that has since been revoked. FINDINGS 3.1 says revocation is
-  # only as good as the verifier, and 10.7 said this lab had demonstrated it
+  # only as good as the verifier, and 10.8 said this lab had demonstrated it
   # against gpgv and measured nothing for dnf or pacman. This is the measurement.
   #
   # Built here rather than committed, because the signature has to be made with
@@ -428,7 +428,7 @@ jobs:
   # actually meets: the keyring source ships exactly one package, and installing
   # it is supposed to leave both repositories configured and working. Nothing
   # else in this workflow installs it, so without this cell the claim "install
-  # the package and you are set up" has no witness at all (FINDINGS 10.7).
+  # the package and you are set up" has no witness at all (FINDINGS 10.8).
   stage-b-keyring-package:
     name: "B keyring package (install it, then use only what it configured)"
     needs: [publish]
