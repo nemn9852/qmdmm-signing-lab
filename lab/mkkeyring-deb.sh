@@ -52,7 +52,7 @@ Components: main
 Signed-By: /usr/share/keyrings/qmdmm-root.gpg
 
 Types: deb
-URIs: $BASE/$DISTRO
+URIs: $BASE/$DISTRO/$SUITE
 Suites: $SUITE
 Components: main
 Signed-By: /usr/share/keyrings/qmdmm-packages.gpg

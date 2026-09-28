@@ -4,16 +4,33 @@ name: signing-lab
 #   root key signs the keyring source; one sign-only subkey per distro line
 #   signs that line's day-to-day source; consumers get everything from Pages.
 #
-# Job split, and the point of it:
-#   sign-*   declare an environment, so they receive that line's subkey secret.
-#            The actual signing runs inside the distro's own container, so the
-#            toolchain under test is the real one.
-#   publish  assembles the site and pushes it to the gh-pages branch. Pages
-#            serves that branch, so the published layout IS the repository
-#            layout: <pages>/<distro> is a repository root a consumer can put
-#            straight into sources.list / baseurl.
-#   verify-* deliberately declare NO environment: they hold no secret at all,
-#            which is exactly a consumer's position.
+# Five stages, run in order:
+#
+#   A pack     build the real packages with the harness's own pack script, once
+#              per (line, version), inside that row's distribution image.
+#   S sign     build and sign that row's repository. Format-level: what comes
+#              out is a signed repository, and which program reads it is a
+#              separate concern, handled below.
+#   publish    assemble the site and push it to the gh-pages branch. Pages
+#              serves that branch, so the published layout IS the repository
+#              layout: <pages>/<line>/<version> is a repository root a consumer
+#              can put straight into sources.list / baseurl / pacman.conf.
+#   B consume  one consumer per row, inside a clean distribution container,
+#              holding no secret: takes the public keys from Pages, configures
+#              the repository, installs the runtime package - and then asserts
+#              that holding ONLY the root key would not have been enough.
+#   C taint    tamper with one metadata file in a local copy of a published
+#              repository and prove the same consumer refuses it. One cell per
+#              (format, consumer) pair, with the untouched copy as a control.
+#
+# Only A and S declare an environment: that is what makes a line's subkey
+# secret visible. publish declares none, and neither do B or C - which is
+# exactly a consumer's position, not a rehearsal of it.
+#
+# Why nothing here runs on push: a run is twelve real Qt 6 builds followed by
+# twelve more containers. Starting that on every push to a repository that is
+# still being iterated on is not worth it, so the whole pipeline hangs off
+# workflow_dispatch and is started deliberately.
 on:
   workflow_dispatch:
     inputs:
@@ -31,450 +48,27 @@ on:
         default: 'Release'
         type: choice
         options: [Release, MinSizeRel, Debug]
-  push:
-    branches: [main]
 
 permissions:
   contents: write            # publish pushes the gh-pages branch
 
 env:
   # The root key does not rotate, so pinning its fingerprint here is fine.
-  # Each line's *subkey* is deliberately NOT listed: sign scripts discover it
-  # from the keyring they just imported, so rotating a subkey never requires
-  # editing this workflow.
+  # Each line's *subkey* is deliberately NOT listed: B and S discover it from
+  # the key file they just fetched, so rotating a subkey never requires editing
+  # this workflow.
   ROOT_FPR: DB05E5D9027139A493E7C9DDCD290DDA2AE83D38
   LAB_PAGES: https://nemn9852.github.io/qmdmm-signing-lab
 
 jobs:
 
-  # ===================== signing side: one container per line =====================
-
-  sign-debian:
-    runs-on: ubuntu-latest
-    environment: debian                     # <- only this makes SIGNING_KEY visible
-    steps:
-      - uses: actions/checkout@v7
-      - name: Sign the day-to-day source inside debian:sid
-        env:
-          SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
-        run: |
-          set -euo pipefail
-          mkdir -p out/debian
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
-            -e OUT=/w/out/debian -e SUITE=sid \
-            debian:sid bash /w/lab/sign-debian.sh
-          sudo chmod -R a+rX out
-      - uses: actions/upload-artifact@v7
-        with:
-          name: repo-debian
-          path: out/debian
-          if-no-files-found: error
-
-  sign-rpm:
-    name: sign-rpm (${{ matrix.line }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { line: fedora, image: "fedora:44",     env: fedora }
-          - { line: rocky,  image: "rockylinux/rockylinux:10", env: rocky  }
-          - { line: alma,   image: "almalinux:10",  env: alma   }
-    environment: ${{ matrix.env }}
-    steps:
-      - uses: actions/checkout@v7
-      - name: Sign the day-to-day source inside ${{ matrix.image }}
-        env:
-          SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
-        run: |
-          set -euo pipefail
-          mkdir -p "out/${{ matrix.line }}"
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
-            -e OUT="/w/out/${{ matrix.line }}" \
-            -e LINE="${{ matrix.line }}" \
-            "${{ matrix.image }}" bash /w/lab/sign-rpm.sh
-          sudo chmod -R a+rX out
-      - uses: actions/upload-artifact@v7
-        with:
-          name: repo-${{ matrix.line }}
-          path: out/${{ matrix.line }}
-          if-no-files-found: error
-
-  sign-arch:
-    runs-on: ubuntu-latest
-    environment: arch
-    steps:
-      - uses: actions/checkout@v7
-      - name: Sign the day-to-day source inside archlinux:base
-        env:
-          SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
-        run: |
-          set -euo pipefail
-          mkdir -p out/arch
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e SIGNING_KEY_B64="$SIGNING_KEY_B64" \
-            -e OUT=/w/out/arch -e LINE=arch \
-            archlinux:base bash /w/lab/sign-arch.sh
-          sudo chmod -R a+rX out
-      - uses: actions/upload-artifact@v7
-        with:
-          name: repo-arch
-          path: out/arch
-          if-no-files-found: error
-
-  # ===================== publish: assemble and push gh-pages =====================
-
-  publish:
-    runs-on: ubuntu-latest
-    needs: [sign-debian, sign-rpm, sign-arch]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          path: artifacts
-      - name: Assemble the site
-        run: |
-          set -euo pipefail
-          mkdir -p _site
-          cp -r site/. _site/                     # locally signed material
-          mkdir -p _site/keys && cp -r keys/. _site/keys/
-          for d in debian fedora rocky alma arch; do
-            src="artifacts/repo-$d"
-            [ -d "$src" ] || continue
-            rm -rf "_site/$d"; mkdir -p "_site/$d"
-            cp -r "$src/." "_site/$d/"
-          done
-          {
-            echo '<!doctype html><meta charset="utf-8">'
-            echo '<title>QMdmm signing lab</title>'
-            echo '<h1>QMdmm signing lab</h1>'
-            echo '<p>A disposable end-to-end test of the QMdmm distro signing scheme.'
-            echo 'These are test keys and are revoked when the lab ends.</p>'
-            echo '<h2>Fingerprints</h2><pre>'
-            sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' keys/fingerprints.txt
-            echo '</pre><h2>Repository roots</h2><ul>'
-            for d in debian debian-keyring debian-revoked fedora rocky alma arch; do
-              [ -d "_site/$d" ] && echo "<li><a href=\"$d/\">$d/</a></li>"
-            done
-            echo '</ul><h2>Tree</h2><pre>'
-            (cd _site && find . -type f | sort | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g')
-            echo '</pre>'
-          } > _site/index.html
-          # Verify jobs wait on this: a branch deploy is async, so "push
-          # returned" does not mean "Pages is serving the new content".
-          printf '{"sha":"%s","run":"%s","at":"%s"}\n' \
-            "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(date -u +%FT%TZ)" > _site/publish.json
-          cat _site/publish.json
-          echo "--- site contents ---"
-          (cd _site && find . -type f | sort)
-      - name: Publish to the gh-pages branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          git init -q _pub && cd _pub
-          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          if git fetch -q --depth 1 origin gh-pages 2>/dev/null; then
-            git checkout -q -B gh-pages FETCH_HEAD
-          else
-            git checkout -q --orphan gh-pages
-          fi
-          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          cp -r ../_site/. .
-          git add -A
-          if git diff --cached --quiet; then
-            echo "no changes to publish"
-          else
-            git -c user.name="Neve M. Nguyen" -c user.email="nemn9852@agent.qq.com" \
-                commit -q -m "publish ${GITHUB_SHA:0:7}"
-            git push -q origin gh-pages
-            echo "pushed gh-pages"
-          fi
-
-  # ===================== consumer side: no environment, no secret =====================
-
-  verify-debian:
-    runs-on: ubuntu-latest
-    needs: [publish]
-    steps:
-      - uses: actions/checkout@v7
-      - name: Confirm no secret is reachable (a consumer's position)
-        env:
-          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -n "${LEAK_CHECK:-}" ]; then
-            echo "!! secret visible without declaring an environment"; exit 1
-          fi
-          echo "OK: verify job sees no secret (same position as a consumer)"
-      - name: Verify inside a clean debian:sid
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e LAB_PAGES="$LAB_PAGES" -e ROOT_FPR="$ROOT_FPR" \
-            -e EXPECT_SHA="${{ github.sha }}" \
-            -e LINE=debian -e SUITE=sid \
-            debian:sid bash /w/lab/verify-debian.sh
-
-  # Named by consumer, not by format: this verifies an rpm repository with dnf.
-  # The repository is produced at format level (stage S) and the same signed
-  # repodata serves any rpm consumer - a later openSUSE row would reuse it and
-  # need a zypper script, not a different signing path.
-  verify-rpm-dnf:
-    name: verify-rpm-dnf (${{ matrix.line }})
-    runs-on: ubuntu-latest
-    needs: [publish]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # fedora:43 is deliberately absent: its shipped dnf5 5.2.18 cannot
-          # verify a repomd.xml signed by any gpg key (all six shapes probed,
-          # FINDINGS.md 4.1), while 44 / 45 / rawhide all can - so it is a dnf5
-          # version defect, not the new normal. 44 is the tag the packaging work
-          # already targets (issue #24: same as fedora:latest).
-          - { line: fedora, image: "fedora:44" }
-          - { line: rocky,  image: "rockylinux/rockylinux:10" }
-          - { line: alma,   image: "almalinux:10"  }
-    steps:
-      - uses: actions/checkout@v7
-      - name: Confirm no secret is reachable (a consumer's position)
-        env:
-          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -n "${LEAK_CHECK:-}" ]; then
-            echo "!! secret visible without declaring an environment"; exit 1
-          fi
-          echo "OK: verify job sees no secret (same position as a consumer)"
-      - name: Verify inside a clean ${{ matrix.image }}
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e LAB_PAGES="$LAB_PAGES" -e ROOT_FPR="$ROOT_FPR" \
-            -e EXPECT_SHA="${{ github.sha }}" \
-            -e LINE="${{ matrix.line }}" \
-            "${{ matrix.image }}" bash /w/lab/verify-rpm-dnf.sh
-
-  verify-arch:
-    runs-on: ubuntu-latest
-    needs: [publish]
-    steps:
-      - uses: actions/checkout@v7
-      - name: Confirm no secret is reachable (a consumer's position)
-        env:
-          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -n "${LEAK_CHECK:-}" ]; then
-            echo "!! secret visible without declaring an environment"; exit 1
-          fi
-          echo "OK: verify job sees no secret (same position as a consumer)"
-      - name: Verify inside a clean archlinux:base
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e LAB_PAGES="$LAB_PAGES" -e ROOT_FPR="$ROOT_FPR" \
-            -e EXPECT_SHA="${{ github.sha }}" \
-            -e LINE=arch \
-            archlinux:base bash /w/lab/verify-arch.sh
-
-  # ============ one-off probe (dispatch only): which key type does a given
-  # rpm/dnf actually accept for repository metadata? Written after fedora:43
-  # (rpm 6 / dnf5) rejected a signature that rocky:10 and alma:10 accepted.
-  #   A. subkey signed   B. primary signed   -> A fail + B pass means the
-  #   problem is subkeys, not the algorithm.
-  probe-rpm-signature:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { line: fedora43, image: "fedora:43",                algo: ed25519 }
-          - { line: fedora43, image: "fedora:43",                algo: rsa4096 }
-          - { line: rocky10,  image: "rockylinux/rockylinux:10", algo: ed25519 }
-          - { line: rocky10,  image: "rockylinux/rockylinux:10", algo: rsa4096 }
-    steps:
-      - uses: actions/checkout@v7
-      - name: Probe ${{ matrix.image }} with ${{ matrix.algo }}
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e LINE="${{ matrix.line }}" -e ALGO="${{ matrix.algo }}" \
-            "${{ matrix.image }}" bash /w/lab/probe-rpm-signature.sh
-
-  # Follow-up: since the failure is neither the algorithm nor the subkey, how
-  # does this distro obtain the key from gpgkey= at all?
-  probe-rpm-keyimport:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { line: fedora43, image: "fedora:43",                algo: ed25519 }
-          - { line: fedora43, image: "fedora:43",                algo: rsa4096 }
-          - { line: rocky10,  image: "rockylinux/rockylinux:10", algo: ed25519 }
-          - { line: rocky10,  image: "rockylinux/rockylinux:10", algo: rsa4096 }
-    steps:
-      - uses: actions/checkout@v7
-      - name: Probe key import on ${{ matrix.image }} (${{ matrix.algo }})
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e LINE="${{ matrix.line }}" -e ALGO="${{ matrix.algo }}" \
-            "${{ matrix.image }}" bash /w/lab/probe-rpm-keyimport.sh
-
-  # Third probe: the key DOES land in dnf5's per-repo keyring and verification
-  # still fails, so isolate which property of the key/signature it objects to.
-  probe-rpm-verify:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { line: fedora43, image: "fedora:43",                algo: ed25519 }
-          - { line: fedora43, image: "fedora:43",                algo: rsa4096 }
-          - { line: rocky10,  image: "rockylinux/rockylinux:10", algo: ed25519 }
-    steps:
-      - uses: actions/checkout@v7
-      - name: Probe what dnf needs to accept repomd.xml on ${{ matrix.image }}
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e LINE="${{ matrix.line }}" -e ALGO="${{ matrix.algo }}" \
-            "${{ matrix.image }}" bash /w/lab/probe-rpm-verify.sh
-
-  # Fourth probe: repo_gpgcheck is dead on fedora:43 for every key shape, so
-  # check whether the package-level path still works there - which is also the
-  # direct answer to the old 'EdDSA signs fine, installs badly' question.
-  probe-rpm-pkgcheck:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { line: fedora43, image: "fedora:43",                algo: ed25519 }
-          - { line: fedora43, image: "fedora:43",                algo: rsa4096 }
-          - { line: rocky10,  image: "rockylinux/rockylinux:10", algo: ed25519 }
-    steps:
-      - uses: actions/checkout@v7
-      - name: Probe package-level signing on ${{ matrix.image }} (${{ matrix.algo }})
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e LINE="${{ matrix.line }}" -e ALGO="${{ matrix.algo }}" \
-            "${{ matrix.image }}" bash /w/lab/probe-rpm-pkgcheck.sh
-
-  # Is the fedora:43 repomd rejection a 43-only bug, or the shape of things to
-  # come? Same probe, four fedora generations, so the answer is a version table
-  # rather than a guess. A tag that does not exist fails with 'manifest unknown',
-  # which is also an answer.
-  probe-fedora-versions:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        image: ["fedora:43", "fedora:44", "fedora:45", "fedora:rawhide"]
-    steps:
-      - uses: actions/checkout@v7
-      - name: Probe ${{ matrix.image }}
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e LINE="${{ matrix.image }}" -e ALGO=ed25519 \
-            "${{ matrix.image }}" bash /w/lab/probe-rpm-verify.sh
-
-  # The rejection tracks dnf5 5.2.18 (fedora:44 has the same rpm 6.0.2 and works,
-  # with dnf5 5.4.3.0). dnf5 is not frozen inside a released Fedora, so this asks
-  # whether the limitation belongs to the release or to the shipped package:
-  # upgrade dnf5 inside fedora:43 and re-run the same three shapes.
-  probe-fedora43-dnf5-upgrade:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Retest fedora:43 with an updated dnf5
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            fedora:43 bash /w/lab/probe-fedora43-dnf5-upgrade.sh
-
-  # Issue #24 names container tags for the release matrix. `rockylinux:10` was
-  # wrong once and cost a run; check every tag resolves before the matrix is
-  # built on them. Fails if any tag is missing, so it is a real gate.
-  probe-matrix-tags:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check the #24 container tags resolve
-        run: bash "$PWD/lab/probe-matrix-tags.sh"
-
-  # Before the 12-row build matrix exists: can each row install the Qt 6
-  # toolchain stage A needs? Three of these images are unreleased distributions.
-  # The package list is read out of the harness's own pack-<fmt>.sh at run time,
-  # so this cannot drift from what stage A will ask for.
-  probe-toolchain:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { line: debian, fmt: deb, version: trixie, image: "debian:trixie" }
-          - { line: debian, fmt: deb, version: forky, image: "debian:forky" }
-          - { line: debian, fmt: deb, version: sid, image: "debian:sid" }
-          - { line: ubuntu, fmt: deb, version: resolute, image: "ubuntu:resolute" }
-          - { line: ubuntu, fmt: deb, version: stonking, image: "ubuntu:stonking" }
-          - { line: fedora, fmt: rpm, version: 44, image: "fedora:44" }
-          - { line: fedora, fmt: rpm, version: 45, image: "fedora:45" }
-          - { line: fedora, fmt: rpm, version: rawhide, image: "fedora:rawhide" }
-          - { line: rocky, fmt: rpm, version: 10, image: "rockylinux/rockylinux:10" }
-          - { line: alma, fmt: rpm, version: 10, image: "almalinux:10" }
-          - { line: arch, fmt: pac, version: rolling, image: "archlinux:base" }
-          - { line: manjaro, fmt: pac, version: rolling, image: "manjarolinux/base:latest" }
-    steps:
-      - uses: actions/checkout@v7
-      - name: Clone the packaging harness
-        run: git clone --depth 1 https://github.com/QMdmm/QMdmmPackagingCi.git harness
-      - name: Probe ${{ matrix.line }} / ${{ matrix.version }}
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -v "$PWD:/w" -w /w \
-            -e FMT="${{ matrix.fmt }}" -e HARNESS=/w/harness \
-            "${{ matrix.image }}" bash /w/lab/probe-toolchain.sh
-
   # ================================================================= stage A
   # The real thing: the harness's own pack script, cloned from
-  # QMdmm/QMdmmPackagingCI, run inside each row's distribution image. Nothing
+  # QMdmm/QMdmmPackagingCi, run inside each row's distribution image. Nothing
   # here signs anything - that is stage S, and keeping them apart is what lets a
   # package be built once and signed once per row rather than per consumer.
-  #
-  # Dispatch-only while it is being brought up: twelve Qt builds per push is not
-  # something to do to a repository that is still being iterated on.
   stage-a-pack:
     name: "A pack (${{ matrix.line }} ${{ matrix.version }})"
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.image }}
@@ -482,18 +76,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { line: debian, fmt: deb, version: trixie, image: "debian:trixie", expect: "-6 -6-dev -common-dev -doc" }
-          - { line: debian, fmt: deb, version: forky, image: "debian:forky", expect: "-6 -6-dev -common-dev -doc" }
-          - { line: debian, fmt: deb, version: sid, image: "debian:sid", expect: "-6 -6-dev -common-dev -doc" }
-          - { line: ubuntu, fmt: deb, version: resolute, image: "ubuntu:resolute", expect: "-6 -6-dev -common-dev -doc" }
-          - { line: ubuntu, fmt: deb, version: stonking, image: "ubuntu:stonking", expect: "-6 -6-dev -common-dev -doc" }
-          - { line: fedora, fmt: rpm, version: 44, image: "fedora:44", expect: "-6 -6-devel -common-devel -doc" }
-          - { line: fedora, fmt: rpm, version: 45, image: "fedora:45", expect: "-6 -6-devel -common-devel -doc" }
-          - { line: fedora, fmt: rpm, version: rawhide, image: "fedora:rawhide", expect: "-6 -6-devel -common-devel -doc" }
-          - { line: rocky, fmt: rpm, version: 10, image: "rockylinux/rockylinux:10", expect: "-6 -6-devel -common-devel -doc" }
-          - { line: alma, fmt: rpm, version: 10, image: "almalinux:10", expect: "-6 -6-devel -common-devel -doc" }
-          - { line: arch, fmt: pac, version: rolling, image: "archlinux:base", expect: "-6" }
-          - { line: manjaro, fmt: pac, version: rolling, image: "manjarolinux/base:latest", expect: "-6" }
+          - { line: debian,  fmt: deb, consumer: apt,    version: trixie,   image: "debian:trixie",            expect: "-6 -6-dev -common-dev -doc" }
+          - { line: debian,  fmt: deb, consumer: apt,    version: forky,    image: "debian:forky",             expect: "-6 -6-dev -common-dev -doc" }
+          - { line: debian,  fmt: deb, consumer: apt,    version: sid,      image: "debian:sid",               expect: "-6 -6-dev -common-dev -doc" }
+          - { line: ubuntu,  fmt: deb, consumer: apt,    version: resolute, image: "ubuntu:resolute",          expect: "-6 -6-dev -common-dev -doc" }
+          - { line: ubuntu,  fmt: deb, consumer: apt,    version: stonking, image: "ubuntu:stonking",          expect: "-6 -6-dev -common-dev -doc" }
+          - { line: fedora,  fmt: rpm, consumer: dnf,    version: 44,       image: "fedora:44",                expect: "-6 -6-devel -common-devel -doc" }
+          - { line: fedora,  fmt: rpm, consumer: dnf,    version: 45,       image: "fedora:45",                expect: "-6 -6-devel -common-devel -doc" }
+          - { line: fedora,  fmt: rpm, consumer: dnf,    version: rawhide,  image: "fedora:rawhide",           expect: "-6 -6-devel -common-devel -doc" }
+          - { line: rocky,   fmt: rpm, consumer: dnf,    version: 10,       image: "rockylinux/rockylinux:10", expect: "-6 -6-devel -common-devel -doc" }
+          - { line: alma,    fmt: rpm, consumer: dnf,    version: 10,       image: "almalinux:10",             expect: "-6 -6-devel -common-devel -doc" }
+          - { line: arch,    fmt: pac, consumer: pacman, version: rolling,  image: "archlinux:base",           expect: "-6" }
+          - { line: manjaro, fmt: pac, consumer: pacman, version: rolling,  image: "manjarolinux/base:latest", expect: "-6" }
     steps:
       # The harness, fetched without needing git *inside* the container - these
       # images do not ship git, and stage A is what installs it. actions/checkout
@@ -529,14 +123,13 @@ jobs:
   # ================================================================= stage S
   # Sign what stage A produced, once per row, in the row's own image and with
   # that row's subkey. Format-level: this produces a signed repository, and the
-  # consumer that later reads it is a separate concern (stage B/C).
+  # consumer that later reads it is a separate concern (stages B and C).
   #
   # The root-signed keyring source is not here on purpose - the root secret never
   # enters CI, so that half stays a trusted-machine step. What runs here holds
   # exactly one subkey and asserts it cannot sign as the root.
   stage-s-sign:
     name: "S sign (${{ matrix.line }} ${{ matrix.version }})"
-    if: github.event_name == 'workflow_dispatch'
     needs: [stage-a-pack]
     runs-on: ubuntu-latest
     container:
@@ -546,22 +139,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { line: debian, fmt: deb, version: trixie, image: "debian:trixie" }
-          - { line: debian, fmt: deb, version: forky, image: "debian:forky" }
-          - { line: debian, fmt: deb, version: sid, image: "debian:sid" }
-          - { line: ubuntu, fmt: deb, version: resolute, image: "ubuntu:resolute" }
-          - { line: ubuntu, fmt: deb, version: stonking, image: "ubuntu:stonking" }
-          - { line: fedora, fmt: rpm, version: 44, image: "fedora:44" }
-          - { line: fedora, fmt: rpm, version: 45, image: "fedora:45" }
-          - { line: fedora, fmt: rpm, version: rawhide, image: "fedora:rawhide" }
-          - { line: rocky, fmt: rpm, version: 10, image: "rockylinux/rockylinux:10" }
-          - { line: alma, fmt: rpm, version: 10, image: "almalinux:10" }
-          - { line: arch, fmt: pac, version: rolling, image: "archlinux:base" }
-          - { line: manjaro, fmt: pac, version: rolling, image: "manjarolinux/base:latest" }
+          - { line: debian,  fmt: deb, version: trixie,   image: "debian:trixie" }
+          - { line: debian,  fmt: deb, version: forky,    image: "debian:forky" }
+          - { line: debian,  fmt: deb, version: sid,      image: "debian:sid" }
+          - { line: ubuntu,  fmt: deb, version: resolute, image: "ubuntu:resolute" }
+          - { line: ubuntu,  fmt: deb, version: stonking, image: "ubuntu:stonking" }
+          - { line: fedora,  fmt: rpm, version: 44,       image: "fedora:44" }
+          - { line: fedora,  fmt: rpm, version: 45,       image: "fedora:45" }
+          - { line: fedora,  fmt: rpm, version: rawhide,  image: "fedora:rawhide" }
+          - { line: rocky,   fmt: rpm, version: 10,       image: "rockylinux/rockylinux:10" }
+          - { line: alma,    fmt: rpm, version: 10,       image: "almalinux:10" }
+          - { line: arch,    fmt: pac, version: rolling,  image: "archlinux:base" }
+          - { line: manjaro, fmt: pac, version: rolling,  image: "manjarolinux/base:latest" }
     steps:
       - uses: actions/checkout@v7
       - name: Fetch the packages stage A built
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: pack-${{ matrix.line }}-${{ matrix.version }}
           path: pkgs
@@ -580,3 +173,241 @@ jobs:
           name: repo-${{ matrix.line }}-${{ matrix.version }}
           path: repo
           if-no-files-found: error
+
+  # ================================================================= publish
+  # Collect what stage S signed and put it on gh-pages, at the path a consumer
+  # will point at. The collection walks the artifact names rather than a list of
+  # lines: a hard-coded list is what silently dropped every stage-S artifact
+  # when the artifact naming moved from per-line to per-(line, version).
+  publish:
+    name: "publish"
+    needs: [stage-s-sign]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Assemble the site
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp -r site/. _site/                     # built off-CI, staged at its published path
+          mkdir -p _site/keys && cp -r keys/. _site/keys/
+
+          shopt -s nullglob
+          n=0
+          for d in artifacts/repo-*; do
+            name="${d#artifacts/repo-}"
+            line="${name%%-*}"; ver="${name#*-}"
+            # repo-<line>-<version>, and both parts must be present: a name with
+            # no dash would otherwise publish itself to a path that hides the bug.
+            if [ -z "$line" ] || [ -z "$ver" ] || [ "$line" = "$ver" ]; then
+              echo "!! cannot read a line/version out of '$name'"; exit 1
+            fi
+            rm -rf "_site/$line/$ver"
+            mkdir -p "_site/$line/$ver"
+            cp -r "$d/." "_site/$line/$ver/"
+            echo "  $name -> $line/$ver  ($(find "$d" -type f | wc -l | tr -d ' ') files)"
+            n=$((n+1))
+          done
+          echo "  $n signed repository/repositories staged"
+          [ "$n" -ge 1 ] || { echo "!! no stage-S artifact to publish"; exit 1; }
+
+          {
+            echo '<!doctype html><meta charset="utf-8">'
+            echo '<title>QMdmm signing lab</title>'
+            echo '<h1>QMdmm signing lab</h1>'
+            echo '<p>A disposable end-to-end test of the QMdmm distro signing scheme.'
+            echo 'These are test keys and are revoked when the lab ends.</p>'
+            echo '<h2>Fingerprints</h2><pre>'
+            sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' keys/fingerprints.txt
+            echo '</pre><h2>Repository roots</h2><ul>'
+            for dir in $(cd _site && find . -mindepth 2 -maxdepth 2 -type d | sed 's|^\./||' | sort); do
+              echo "<li><a href=\"$dir/\">$dir/</a></li>"
+            done
+            for dir in debian-keyring debian-revoked; do
+              [ -d "_site/$dir" ] && echo "<li><a href=\"$dir/\">$dir/</a> (built off-CI)</li>"
+            done
+            echo '</ul><h2>Tree</h2><pre>'
+            (cd _site && find . -type f | sort | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g')
+            echo '</pre>'
+          } > _site/index.html
+          # Consumers wait on this: a branch deploy is async, so "push returned"
+          # does not mean "Pages is serving the new content".
+          printf '{"sha":"%s","run":"%s","at":"%s"}\n' \
+            "$GITHUB_SHA" "$GITHUB_RUN_ID" "$(date -u +%FT%TZ)" > _site/publish.json
+          cat _site/publish.json
+          echo "--- site contents ---"
+          (cd _site && find . -type f | sort)
+      - name: Publish to the gh-pages branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git init -q _pub && cd _pub
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch -q --depth 1 origin gh-pages 2>/dev/null; then
+            git checkout -q -B gh-pages FETCH_HEAD
+          else
+            git checkout -q --orphan gh-pages
+          fi
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -r ../_site/. .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no changes to publish"
+          else
+            git -c user.name="Neve M. Nguyen" -c user.email="nemn9852@agent.qq.com" \
+                commit -q -m "publish ${GITHUB_SHA:0:7}"
+            git push -q origin gh-pages
+            echo "pushed gh-pages"
+          fi
+
+  # ================================================================= stage B
+  # The consumer half, one cell per row: same twelve (line, version) pairs, but
+  # in a clean container with no environment declared, so it holds no secret.
+  # Each script is named after the program that reads the format (apt, dnf,
+  # pacman), and each one asserts both halves - that its own line's key works,
+  # and that the root key alone would not have been enough.
+  #
+  # The keys come from Pages and nowhere else, so this is what a real consumer
+  # of the published repository can do and nothing more.
+  stage-b-consume:
+    name: "B consume (${{ matrix.line }} ${{ matrix.version }}, ${{ matrix.consumer }})"
+    needs: [publish]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: debian,  fmt: deb, consumer: apt,    version: trixie,   image: "debian:trixie" }
+          - { line: debian,  fmt: deb, consumer: apt,    version: forky,    image: "debian:forky" }
+          - { line: debian,  fmt: deb, consumer: apt,    version: sid,      image: "debian:sid" }
+          - { line: ubuntu,  fmt: deb, consumer: apt,    version: resolute, image: "ubuntu:resolute" }
+          - { line: ubuntu,  fmt: deb, consumer: apt,    version: stonking, image: "ubuntu:stonking" }
+          - { line: fedora,  fmt: rpm, consumer: dnf,    version: 44,       image: "fedora:44" }
+          - { line: fedora,  fmt: rpm, consumer: dnf,    version: 45,       image: "fedora:45" }
+          - { line: fedora,  fmt: rpm, consumer: dnf,    version: rawhide,  image: "fedora:rawhide" }
+          - { line: rocky,   fmt: rpm, consumer: dnf,    version: 10,       image: "rockylinux/rockylinux:10" }
+          - { line: alma,    fmt: rpm, consumer: dnf,    version: 10,       image: "almalinux:10" }
+          - { line: arch,    fmt: pac, consumer: pacman, version: rolling,  image: "archlinux:base" }
+          - { line: manjaro, fmt: pac, consumer: pacman, version: rolling,  image: "manjarolinux/base:latest" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Confirm no secret is reachable (a consumer's position)
+        env:
+          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LEAK_CHECK:-}" ]; then
+            echo "!! secret visible without declaring an environment"; exit 1
+          fi
+          echo "OK: this job sees no secret (same position as a consumer)"
+      - name: Fetch what stage A recorded, to check the site serves it
+        uses: actions/download-artifact@v8
+        with:
+          name: pack-${{ matrix.line }}-${{ matrix.version }}
+          path: pkgs
+      - name: Consume the published repository
+        env:
+          PAGES: ${{ env.LAB_PAGES }}
+          ROOT_FPR: ${{ env.ROOT_FPR }}
+          EXPECT_SHA: ${{ github.sha }}
+          LINE: ${{ matrix.line }}
+          VERSION: ${{ matrix.version }}
+          PKGS: ${{ github.workspace }}/pkgs
+        run: bash "$PWD/lab/consume-${{ matrix.consumer }}.sh"
+
+  # ===================== stage B, the half that is built off-CI ==============
+  # One cell, not twelve. The root-signed keyring source and the revoked-subkey
+  # fixture are produced on a trusted machine - the root secret never enters a
+  # workflow - so there is exactly one of each, whatever the line count is.
+  #
+  # This cell is what keeps "only the root key may sign the keyring source" and
+  # "a revoked subkey stops being trusted" from being claims with nobody
+  # checking them. The second assertion reads gpg's status stream rather than
+  # its exit code, because the exit code does not change for a revoked signer
+  # (FINDINGS.md 3.1).
+  stage-b-keyring:
+    name: "B keyring (root-signed source + revoked fixture)"
+    needs: [publish]
+    runs-on: ubuntu-latest
+    container:
+      image: "debian:sid"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Confirm no secret is reachable (a consumer's position)
+        env:
+          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LEAK_CHECK:-}" ]; then
+            echo "!! secret visible without declaring an environment"; exit 1
+          fi
+          echo "OK: this job sees no secret (same position as a consumer)"
+      - name: Check the off-CI sources
+        env:
+          PAGES: ${{ env.LAB_PAGES }}
+          ROOT_FPR: ${{ env.ROOT_FPR }}
+          EXPECT_SHA: ${{ github.sha }}
+        run: bash "$PWD/lab/consume-apt-keyring.sh"
+
+  # ================================================================= stage C
+  # Tamper with one metadata file in a local copy of a published repository and
+  # prove the consumer refuses it. One cell per (format, consumer) pair: the
+  # file layout is format-level, the refusal is consumer-level, and rpm alone
+  # has two consumers here (dnf4 on EL, dnf5 on fedora) that do not share a
+  # verification implementation.
+  #
+  # Each run first checks the UNTAMPERED copy against the same consumer, so a
+  # failure later cannot be blamed on the harness instead of on the tampering.
+  stage-c-taint:
+    name: "C taint (${{ matrix.line }} ${{ matrix.version }}, ${{ matrix.consumer }})"
+    needs: [publish]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: debian, fmt: deb, consumer: apt,    version: sid,     image: "debian:sid" }
+          - { line: fedora, fmt: rpm, consumer: dnf5,   version: 44,      image: "fedora:44" }
+          - { line: rocky,  fmt: rpm, consumer: dnf4,   version: 10,      image: "rockylinux/rockylinux:10" }
+          - { line: arch,   fmt: pac, consumer: pacman, version: rolling, image: "archlinux:base" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Confirm no secret is reachable (a consumer's position)
+        env:
+          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LEAK_CHECK:-}" ]; then
+            echo "!! secret visible without declaring an environment"; exit 1
+          fi
+          echo "OK: this job sees no secret (same position as a consumer)"
+      - name: Tamper with a published repository
+        env:
+          PAGES: ${{ env.LAB_PAGES }}
+          ROOT_FPR: ${{ env.ROOT_FPR }}
+          EXPECT_SHA: ${{ github.sha }}
+          LINE: ${{ matrix.line }}
+          VERSION: ${{ matrix.version }}
+          FMT: ${{ matrix.fmt }}
+        run: bash "$PWD/lab/taint-repo.sh"
+
+  # ============ the one probe worth keeping: a release matrix is a list of
+  # container tags, and a tag that does not resolve is a red job on the first
+  # run for no reason (`rockylinux:10` was exactly that - the real name is
+  # rockylinux/rockylinux:10). Checks them all at once, before anything is built
+  # on them, using `docker manifest inspect` so nothing gets downloaded.
+  probe-matrix-tags:
+    name: "probe matrix tags"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check every container tag issue #24 names resolves
+        run: bash "$PWD/lab/probe-matrix-tags.sh"

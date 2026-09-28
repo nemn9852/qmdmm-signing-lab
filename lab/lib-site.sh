@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
-# Shared by the verify scripts.
+# Shared by the stage B consumer scripts and the stage C taint scripts.
 #
-# Why this exists: Pages serves the gh-pages branch, and publishing to a branch
-# is asynchronous - the push returns immediately, the build and its CDN
-# invalidation do not. A verify job that starts right after publish therefore
+# Why wait_for_publish exists: Pages serves the gh-pages branch, and publishing
+# to a branch is asynchronous - the push returns immediately, the build and its
+# CDN invalidation do not. A consumer that starts right after publish therefore
 # reads the PREVIOUS site, which looks like a broken signature scheme rather
 # than a stale deploy. (That is exactly what happened on the first run.)
 #
-# So publish drops a publish.json naming the commit it built, and every verify
+# So publish drops a publish.json naming the commit it built, and every consumer
 # waits for the site to actually serve that commit before asserting anything.
 
 wait_for_publish() {
@@ -27,4 +27,63 @@ wait_for_publish() {
   done
   echo "  !! the site never served publish ${expect:0:7}"
   return 1
+}
+
+# fetch <url> <dest> - public material only, and it says so in the log, because
+# "the consumer got its keys from Pages" is a claim this lab has to be able to
+# point at.
+fetch() {
+  local url="$1" dest="$2" size
+  if ! curl -fsSL --max-time 180 "$url" -o "$dest"; then
+    echo "  !! could not fetch ${url#*/qmdmm-signing-lab/}"
+    return 1
+  fi
+  size=$(wc -c < "$dest" | tr -d ' ')
+  printf '  %-46s %8s bytes\n' "${url#*/qmdmm-signing-lab/}" "$size"
+}
+
+# The root fingerprint of a key file - the first ^fpr: after ^pub:.
+key_fpr() {  # key_fpr <file>
+  gpg --with-colons --show-keys "$1" 2>/dev/null \
+    | awk -F: '/^pub:/{f=1;next} f&&/^fpr:/{print $10; exit}'
+}
+
+# The fingerprint of the first signing subkey in a key file.
+first_sub_fpr() {  # first_sub_fpr <file>
+  gpg --with-colons --show-keys "$1" 2>/dev/null \
+    | awk -F: '/^sub:/{f=1;next} f&&/^fpr:/{print $10; exit}'
+}
+
+count_subkeys() {  # count_subkeys <file>
+  gpg --with-colons --show-keys "$1" 2>/dev/null \
+    | awk -F: '/^sub:/{n++} END{print n+0}'
+}
+
+# The package names stage A recorded for this row. Empty when the artifact was
+# not handed over, which turns the "served == built" assertion into a no-op
+# rather than a false failure.
+built_packages() {  # built_packages <pkgs-dir>
+  local dir="${1:-}"
+  if [ -n "$dir" ] && [ -f "$dir/MANIFEST.tsv" ]; then
+    tail -n +2 "$dir/MANIFEST.tsv" | cut -f1 | sort -u
+  fi
+}
+
+# The runtime packages out of a list - the ones a normal user installs. The
+# -dev / -devel / -doc packages are asserted to exist, but installing them
+# would only drag in a toolchain this check is not about.
+runtime_packages() {
+  grep -vE -- '-(dev|devel|doc)$' || true
+}
+
+# assert_same_set <label> <expected-newline-list> <got-newline-list>
+assert_same_set() {
+  local label="$1" want="$2" got="$3"
+  if [ "$want" != "$got" ]; then
+    echo "  !! $label differ"
+    echo "     built:  $(printf '%s' "$want" | tr '\n' ' ')"
+    echo "     served: $(printf '%s' "$got"  | tr '\n' ' ')"
+    return 1
+  fi
+  echo "  $label match: $(printf '%s' "$want" | tr '\n' ' ')"
 }

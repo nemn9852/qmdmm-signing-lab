@@ -9,72 +9,100 @@ meant to be deleted. The point is to find the traps before the real thing.
 
 Results and traps: **[FINDINGS.md](FINDINGS.md)**.
 
+## What one run does
+
+Five stages, in order. All of it is `workflow_dispatch` only: a run is twelve
+real Qt 6 builds, which is not something to start on every push.
+
+| Stage | Jobs | Declares `environment:` | What it proves |
+|---|---|---|---|
+| **A** pack | `stage-a-pack` × 12 | no | the harness's *own* pack script builds real packages inside the row's own distribution image |
+| **S** sign | `stage-s-sign` × 12 | **yes**, one per line | the row's subkey signs the repository it just built — and the root secret is *not* usable in that container |
+| **B** consume | `stage-b-consume` × 12, `stage-b-keyring` | no | a real consumer, holding no secret, installs from the published repository; and the root key alone would not have been enough |
+| **C** taint | `stage-c-taint` × 4 | no | tampering with published metadata is detected — with the *untouched* copy as a control |
+| publish | `publish` | no | the site assembled on gh-pages **is** the repository layout |
+
+Only `stage-s-sign` declares an environment. That is the whole trick: without
+it `${{ secrets.* }}` expands to empty, so every B and C job sits in exactly a
+consumer's position rather than a rehearsal of one.
+
 ## Published layout
 
-Pages serves the `gh-pages` branch (pushed by CI, not deployed as an artifact),
-and what lands there **is** the repository layout — a consumer points straight
-at it:
+Pages serves the `gh-pages` branch (pushed by CI, not uploaded as a deploy
+artifact), and what lands there **is** the repository layout — a consumer
+points straight at it:
 
 | Path | What | How a consumer uses it |
 |---|---|---|
-| `<pages>/debian` | day-to-day source (subkey-signed) | `deb [signed-by=…] <pages>/debian sid main` |
-| `<pages>/debian-keyring` | keyring source (root-signed) | `deb [signed-by=…] <pages>/debian-keyring sid main` |
+| `<pages>/<line>/<version>` | day-to-day source, subkey-signed — 12 of them | `deb [signed-by=…] <pages>/debian/sid sid main`<br>`baseurl=<pages>/fedora/44`<br>`Server = <pages>/arch/rolling` |
+| `<pages>/debian-keyring` | keyring source, **root**-signed | `deb [signed-by=…] <pages>/debian-keyring sid main` |
 | `<pages>/debian-revoked` | fixture signed by a since-revoked subkey | nothing — a test asserts it is *rejected* |
-| `<pages>/fedora` `<pages>/rocky` `<pages>/alma` | rpm sources (subkey-signed) | `baseurl=<pages>/<line>` |
-| `<pages>/arch` | pacman source (subkey-signed) | `Server = <pages>/arch` |
-| `<pages>/keys/…` | public keys + fingerprints | `gpg --import` / eyeball the fingerprint |
+| `<pages>/keys/…` | public keys + fingerprints | what every consumer in this lab fetches |
+
+Each line has **one** subkey covering all of that line's versions: the same key
+signs `debian/{trixie,forky,sid}`, and the same key signs `fedora/{44,45,rawhide}`.
+Rotating a line replaces one subkey.
 
 **Why two directories for apt:** `Signed-By` names one key file per source, and
 the whole design rests on the keyring source being verifiable by the root key
 *alone*. So the keyring source and the day-to-day source cannot share a
 directory — they carry different key files.
 
+## The two axes
+
+The grid carries two independent axes, and collapsing them is the mistake this
+lab exists to avoid:
+
+- **format** — `deb` / `rpm` / `pac`. What stage S produces, and therefore which
+  script signs it (`sign-repo-<fmt>.sh`). One signed rpm repository serves every
+  rpm consumer; nothing in stage S is dnf-specific.
+- **consumer** — `apt` / `dnf` / `pacman`. Which program reads it, and therefore
+  which script verifies it (`consume-<consumer>.sh`) and which command re-reads
+  the metadata when it is tampered with (stage C).
+
+`rpm` is not `dnf`, so stage C runs two rpm cells: fedora's dnf5 and EL's dnf4 do
+not share a verification implementation. A later openSUSE row would add a third
+(`zypper`) without touching anything in stage S.
+
 ## In this repo
 
 ```
-keys/     published public keys
-  qmdmm-root.gpg                  root only, no subkeys  -> keyring repo's Signed-By
-  <distro>/qmdmm-packages.gpg     root + that line's subkey -> day-to-day Signed-By
+keys/   published public keys
+  qmdmm-root.gpg                  root only, no subkeys  -> the keyring repo's Signed-By
+  <line>/qmdmm-packages.gpg       root + that line's subkey -> the day-to-day Signed-By
   fingerprints.txt
-site/     material that must be built OFF-CI, staged at its published path
+site/   material that must be built OFF-CI, staged at its published path
   debian-keyring/                 the root-signed keyring source
   debian-revoked/                 the revoked-subkey fixture
-lab/      the scripts — all reusable, all English
-  sign-debian.sh    sign-rpm.sh    sign-arch.sh
-  verify-debian.sh  verify-rpm.sh  verify-arch.sh
-  mkrepo-debian.sh  rotate-debian-local.sh
+lab/    the scripts — all reusable, all English
+  sign-repo-{deb,rpm,pac}.sh      stage S, format-level
+  consume-{apt,dnf,pacman}.sh     stage B, consumer-level
+  consume-apt-keyring.sh          stage B, the half that is built off-CI
+  taint-repo.sh                   stage C, tampering must be detected
+  mkrepo-debian.sh                build + sign a minimal apt tree (off-CI)
+  mkkeyring-deb.sh                build <repo>-archive-keyring (off-CI)
+  rotate-debian-local.sh          rotate one line's subkey (off-CI)
+  lib-site.sh                     waiting for the deploy, fetching keys, assertions
+  lib-tools.sh                    md5sum / sha256sum / dpkg-deb, nothing else
+  probe-*.sh                      the one-off probes, kept as the reproducible
+                                  path behind FINDINGS §4. No longer wired into
+                                  the workflow, except probe-matrix-tags.sh,
+                                  which is a real gate rather than a probe.
+  lines.tsv                       issue #24 as data; the workflow's matrices are
+                                  a mirror of it and the two must stay in step
 ```
-
-`sign-rpm.sh` is shared by fedora / rocky / alma: signing is a property of the
-packaging format, not of the distro.
-
-## Job split, and why
-
-| Job | Declares `environment:` | What it proves |
-|---|---|---|
-| `sign-debian`, `sign-rpm`, `sign-arch` | **yes** (one per line) | gets that line's subkey secret; signs inside the real distro container |
-| `publish` | — | assembles the site and pushes `gh-pages` |
-| `verify-debian`, `verify-rpm`, `verify-arch` | **no** | holds no secret at all — exactly a consumer's position |
-
-The verify jobs are the interesting half: not declaring an `environment:` means
-`${{ secrets.* }}` expands to empty, so they see nothing but what Pages
-publishes.
-
-There is no inverted assertion here, and no skipped scenario. `fedora:43` is
-simply not part of this lab: its shipped dnf5 5.2.18 cannot verify a `repomd.xml`
-signed by any gpg key, while fedora 44 / 45 / rawhide all can (FINDINGS.md §4).
-That is a dnf5 version defect, so the fix was to stop testing on 43 — the fedora
-line runs on `fedora:44`, the tag the packaging work already targets.
 
 ## Running it
 
-Push to `main`, or dispatch the workflow. The two steps that must stay off CI:
+Dispatch the workflow. Two steps must stay **off** CI — the root secret never
+enters a workflow, so both are run on a trusted machine:
 
-    # build the root-signed keyring source
+    # rebuild the root-signed keyring source after a change to the layout
     bash lab/mkrepo-debian.sh <root-fpr> site/debian-keyring sid "keyring source (root-signed)"
 
-    # rotate the debian subkey (freezes a fixture first, then prints the secret
-    # that needs uploading)
+    # rotate one line's subkey: freeze a fixture with it first, revoke it, add a
+    # fresh one, re-sign the keyring source, and print the secret that then has
+    # to be uploaded to that line's environment
     bash lab/rotate-debian-local.sh debian
 
 Both expect a throwaway keyring plus a `$HOME/qmdmm-signing-lab/env.sh` holding

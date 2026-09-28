@@ -290,7 +290,9 @@ Consequences, in order of how much they matter:
 - **fedora:43 is dropped from this lab**, and the fedora line runs `fedora:44`
   (the tag issue #24 already identifies with `fedora:latest`). With no known
   limitation left, the inverted assertion, its positive-control probe and
-  `verify-rpm.sh`'s escape hatch were all removed rather than left as dead code.
+  `verify-rpm-dnf.sh`'s escape hatch were all removed rather than left as dead
+  code. (That script has since been replaced by `consume-dnf.sh` along with the
+  rest of the first generation - see §10.)
 - **Issue #24 should not carry a fedora:43 row without a note.** As listed it
   would fail `repo_gpgcheck` on that container. Two honest options: drop 43, or
   keep it and fall back to package-level `gpgcheck` there.
@@ -429,7 +431,7 @@ Consequences, which is why this is written down before the stages exist:
 - **Stage A and stage S are format-level.** `ci/pack-rpm.sh` and a signed
   `repodata/` know nothing about dnf, and the same signed repodata serves any rpm
   consumer.
-- **Stage B/C is consumer-level.** `lab/verify-rpm-dnf.sh` is named for dnf and
+- **Stage B/C is consumer-level.** `lab/consume-dnf.sh` is named for dnf and
   not for rpm, because that is the half that would differ.
 - **A new consumer is a new verification script, not new packaging or signing.**
   `openSUSE` + `zypper` is the case that will exercise this: same rpm format,
@@ -439,3 +441,69 @@ Consequences, which is why this is written down before the stages exist:
   already bitten: `dnf makecache` exits **0** even when repomd verification
   fails. That is a dnf behaviour, and it stays labelled as one - a zypper script
   must not inherit it as an assumption.
+
+## 10. The pipeline as it now stands, and what B and C had to be careful about
+
+The stand-in chain is gone. `sign-debian` / `sign-rpm` / `sign-arch` and their
+`verify-*` counterparts were the *first* generation: one job per distro line, one
+container each, operated on a hand-built site. They are replaced by A → S →
+publish → B → C, where the artifact under test is a real package built by the
+harness (A), signed once per row at format level (S), published as-is (publish),
+and then read by a consumer that holds no secret (B) and whose refusal of
+tampering is measured against an untouched control (C).
+
+Three things were worth more than the code they cost.
+
+### 10.1 The control group in stage C is the same object, not a fresh setup
+
+Each C cell first points the consumer at an **untampered** local copy of the
+published repository and requires that refresh to succeed, then appends one byte
+to a metadata file and requires the *same* refresh to fail. §3.7 is the reason:
+a failure in the second half can otherwise be caused by the harness itself - a
+mistyped `file://` URL, a key that never got imported - and it still looks like
+detection. The control has to be the very object the tampering then modifies.
+
+### 10.2 Revocation is asserted on the status stream, not on the exit code
+
+`stage-b-keyring` checks that the fixture signed by a since-revoked subkey is
+*reported* as revoked. Per §3.1 that cannot be done with an exit code, nor by
+grepping `Good signature`: `gpg --verify` prints **Good signature** and exits
+**0** for a revoked signer. The assertion therefore reads
+`--status-fd`, where a revoked signer produces `REVKEYSIG` / `KEYREVOKED`
+instead of `GOODSIG`.
+
+That cell also exists so the two claims about the keyring source keep a witness:
+that it verifies under the **root key alone**, and that the signer really is the
+root key (`GOODSIG`'s key id is compared, not merely "a signature verified" -
+a subkey living in the same key file would otherwise satisfy the check).
+
+### 10.3 A hard-coded artifact list silently drops everything after a rename
+
+The publish step used to collect artifacts with
+
+    for d in debian fedora rocky alma arch; do src="artifacts/repo-$d"; ...
+
+which matched the *first* generation's per-line names (`repo-debian`,
+`repo-fedora`, …). When stage S moved to per-(line, version) names
+(`repo-debian-sid`, `repo-fedora-44`, …), **not one** of them matched: each
+iteration hit `[ -d "$src" ] || continue` and the run stayed green while the site
+carried none of the signed repositories. A skipped `continue` is invisible; a
+green job is not evidence that the thing ran.
+
+The collection now walks `artifacts/repo-*`, splits the name into line and
+version, and **fails** if a name cannot be read - so the next rename breaks the
+run instead of quietly emptying the site.
+
+Two consequences of the same mistake were fixed with it: `keys/` carried only
+the first five lines (no `ubuntu/`, no `manjaro/`), and `site/`'s keyring package
+pointed consumers at `<pages>/<line>` rather than `<pages>/<line>/<suite>`.
+
+### 10.4 One thing here is a prediction, not a measurement
+
+`consume-dnf.sh` tries `--qf` and then `--queryformat` when listing a
+repository's packages, because dnf5 is documented as having renamed the option
+and this lab runs both a dnf5 line (fedora) and dnf4 lines (rocky, alma). The
+two-option probe is deliberately harmless if that is wrong - it costs one failed
+command - but it has **not** been observed in this lab yet. If a later run shows
+dnf5 rejecting `--qf` and accepting `--queryformat`, this paragraph should be
+replaced with the measurement rather than kept as a hedge.

@@ -61,8 +61,13 @@ gzip -kf "$ARCHDIR/Packages"
 {
   echo "Origin: QMdmm Signing Lab"
   echo "Label: QMdmm Signing Lab"
-  echo "Suite: stable"
-  echo "Codename: stable"
+  # Suite and Codename have to name the suite the tree is actually under. They
+  # used to be the literal string "stable" while the directory was dists/<suite>,
+  # and apt answers a mismatched Suite with "Conflicting distribution" and then
+  # treats the source with suspicion - which is a strange thing to hand a
+  # consumer in a lab whose whole point is that apt accepts this repository.
+  echo "Suite: $SUITE"
+  echo "Codename: $SUITE"
   echo "Date: $(date -u '+%a, %d %b %Y %H:%M:%S UTC')"
   echo "Architectures: all"
   echo "Components: main"
