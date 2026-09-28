@@ -267,14 +267,25 @@ jobs:
             echo 'These are test keys and are revoked when the lab ends.</p>'
             echo '<h2>Fingerprints</h2><pre>'
             sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' keys/fingerprints.txt
-            echo '</pre><h2>Repository roots</h2><ul>'
-            for dir in $(cd _site && find . -mindepth 2 -maxdepth 2 -type d | sed 's|^\./||' | sort); do
-              echo "<li><a href=\"$dir/\">$dir/</a></li>"
-            done
-            for dir in debian-keyring debian-revoked revoked-rpm revoked-pac; do
-              [ -d "_site/$dir" ] && echo "<li><a href=\"$dir/\">$dir/</a> (built off-CI)</li>"
-            done
-            echo '</ul><h2>Tree</h2><pre>'
+          echo '</pre><h2>Repository roots</h2><ul>'
+          # A line directory holds one row per version; anything else at the top
+          # level is material built off-CI (the keyring source, the frozen
+          # rotation fixtures). Derived from lab/lines.tsv rather than listed:
+          # the hard-coded list this replaces is the same shape of trap the
+          # artifact collection above was rewritten to avoid, and a fixture
+          # nobody can find on the site is indistinguishable from one that was
+          # never published.
+          lines=$(tail -n +2 lab/lines.tsv | cut -f1 | sort -u)
+          for top in $(cd _site && find . -mindepth 1 -maxdepth 1 -type d | sed 's|^\./||' | sort); do
+            if printf '%s\n' "$lines" | grep -qx "$top"; then
+              for ver in $(cd "_site/$top" && find . -mindepth 1 -maxdepth 1 -type d | sed 's|^\./||' | sort); do
+                echo "<li><a href=\"$top/$ver/\">$top/$ver/</a></li>"
+              done
+            else
+              echo "<li><a href=\"$top/\">$top/</a> (built off-CI)</li>"
+            fi
+          done
+          echo '</ul><h2>Tree</h2><pre>'
             (cd _site && find . -type f | sort | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g')
             echo '</pre>'
           } > _site/index.html
@@ -487,6 +498,55 @@ jobs:
           PAGES: ${{ env.LAB_PAGES }}
           EXPECT_SHA: ${{ github.sha }}
         run: bash "$PWD/lab/consume-revoked-${{ matrix.consumer }}.sh"
+
+  # ============ and the other half of an incident plan: a line whose subkey was
+  # actually ROTATED. The stage above asks whether the consumer consults a
+  # revocation certificate, using a key that exists only to be revoked. This one
+  # asks the four questions a rotation raises, on the three lines that have been
+  # rotated, and the two new ones are the corners nobody had measured:
+  #
+  #   - a consumer that has NOT refreshed cannot read the new source at all, so
+  #     "rotate and move consumers" is only a plan if the new key file and the
+  #     new signature ship together;
+  #   - a consumer that HAS refreshed, and therefore holds the certificate, is
+  #     handed the OLD source - and on rpm that is accepted (FINDINGS 10.7, here
+  #     re-measured with a real rotated line key).
+  #
+  # One cell per (format, verifier implementation), the same axis stage C uses:
+  # dnf5 on fedora, dnf4 on rocky, pacman on arch. The other four lines share a
+  # verifier with one of these, so they would repeat a measurement rather than
+  # make one.
+  stage-b-rotated:
+    name: "B rotated (${{ matrix.line }}, ${{ matrix.consumer }})"
+    needs: [publish]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: fedora, fmt: rpm, consumer: dnf,    version: 44,      image: "fedora:44" }
+          - { line: rocky,  fmt: rpm, consumer: dnf,    version: 10,      image: "rockylinux/rockylinux:10" }
+          - { line: arch,   fmt: pac, consumer: pacman, version: rolling, image: "archlinux:base" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Confirm no secret is reachable (a consumer's position)
+        env:
+          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LEAK_CHECK:-}" ]; then
+            echo "!! secret visible without declaring an environment"; exit 1
+          fi
+          echo "OK: this job sees no secret (same position as a consumer)"
+      - name: Check what a rotation does to this consumer
+        env:
+          PAGES: ${{ env.LAB_PAGES }}
+          EXPECT_SHA: ${{ github.sha }}
+          LINE: ${{ matrix.line }}
+          VERSION: ${{ matrix.version }}
+        run: bash "$PWD/lab/consume-rotated-${{ matrix.consumer }}.sh"
 
   # ================================================================= stage C
   # Tamper with one metadata file in a local copy of a published repository and

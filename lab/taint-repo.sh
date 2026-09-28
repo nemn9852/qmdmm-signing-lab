@@ -63,37 +63,15 @@ fetch "$PAGES/keys/$LINE/qmdmm-packages.gpg" "$W/keys/packages.gpg"
 # 0700 directory - stage B hit exactly this. Here the copy is made reachable
 # rather than moved, because the file:// source names it by path.
 chmod 755 "$W"; chmod 644 "$W"/keys/*
-sub=$(first_sub_fpr "$W/keys/packages.gpg")
+sub=$(live_sub_fpr "$W/keys/packages.gpg")
 echo "  this line's subkey: $sub"
-[ -n "$sub" ] || { echo "  !! no subkey in the packages key file"; exit 1; }
+[ -n "$sub" ] || { echo "  !! no usable subkey in the packages key file"; exit 1; }
+dead=$(dead_subkeys "$W/keys/packages.gpg")
+[ "$dead" = 0 ] || echo "  (+$dead revoked subkey in the same file: this line has been rotated)"
 
 echo
 echo "--- take the metadata down (packages are not needed to verify metadata) ---"
-case "$FMT" in
-  deb)
-    d="$R/dists/$VERSION"
-    mkdir -p "$d/main/binary-all"
-    fetch "$BASE/dists/$VERSION/InRelease"              "$d/InRelease"
-    fetch "$BASE/dists/$VERSION/Release"                "$d/Release"
-    fetch "$BASE/dists/$VERSION/main/binary-all/Packages"    "$d/main/binary-all/Packages"
-    fetch "$BASE/dists/$VERSION/main/binary-all/Packages.gz" "$d/main/binary-all/Packages.gz"
-    ;;
-  rpm)
-    mkdir -p "$R/repodata"
-    fetch "$BASE/repodata/repomd.xml"     "$R/repodata/repomd.xml"
-    fetch "$BASE/repodata/repomd.xml.asc" "$R/repodata/repomd.xml.asc"
-    # The rest of repodata is named with a hash, so it is read out of repomd.xml
-    # instead of being guessed.
-    mapfile -t more < <(grep -o 'href="repodata/[^"]*"' "$R/repodata/repomd.xml" \
-                        | sed 's/^href="//; s/"$//' | sort -u)
-    [ "${#more[@]}" -ge 1 ] || { echo "  !! repomd.xml names no other metadata file"; exit 1; }
-    for f in "${more[@]}"; do fetch "$BASE/$f" "$R/$f"; done
-    ;;
-  pac)
-    fetch "$BASE/lab.db"     "$R/lab.db"
-    fetch "$BASE/lab.db.sig" "$R/lab.db.sig"
-    ;;
-esac
+fetch_row_metadata "$BASE" "$FMT" "$R" || exit 1
 
 echo
 echo "--- the signature on the metadata names this line's subkey ---"

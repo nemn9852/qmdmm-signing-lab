@@ -82,9 +82,14 @@ nsub=$(count_subkeys "$W/keys/root.gpg")
 echo "  root key file:  $rootfpr   subkeys: $nsub"
 [ "$rootfpr" = "$ROOT_FPR" ] || { echo "  !! root fingerprint is not $ROOT_FPR"; exit 1; }
 [ "$nsub" = 0 ] || { echo "  !! the root key file carries subkeys; it must carry none"; exit 1; }
-sub=$(first_sub_fpr "$W/keys/packages.gpg")
-echo "  packages key:   $sub   (this line's operational subkey)"
-[ -n "$sub" ] || { echo "  !! the packages key file carries no subkey"; exit 1; }
+sub=$(live_sub_fpr "$W/keys/packages.gpg")
+echo "  packages key:   ${sub:-<none>}   (this line's operational subkey)"
+[ -n "$sub" ] || { echo "  !! the packages key file carries no usable subkey"; exit 1; }
+dead=$(dead_subkeys "$W/keys/packages.gpg")
+if [ "$dead" != 0 ]; then
+  echo "  (+$dead revoked subkey in the same file: this line has been rotated,"
+  echo "   and dnf imports the whole file, so the live one is what verifies)"
+fi
 echo "  OK: root and operational keys are different keys"
 
 echo

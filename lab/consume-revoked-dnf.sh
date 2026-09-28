@@ -64,6 +64,10 @@ echo
 echo "--- the two public states of one key ---"
 fetch "$PAGES/keys/revoked-fixture-before.gpg" "$W/keys/before.gpg"
 fetch "$PAGES/keys/revoked-fixture.gpg"        "$W/keys/after.gpg"
+# `first_sub_fpr`, NOT `live_sub_fpr`, and deliberately: the whole point here is
+# that both files carry the SAME subkey in two public states, and the "after"
+# file's only subkey is the revoked one - asking for a *usable* one would return
+# nothing and turn "same key, two states" into a false failure.
 sub_before=$(first_sub_fpr "$W/keys/before.gpg")
 sub_after=$(first_sub_fpr "$W/keys/after.gpg")
 echo "  before: subkey $sub_before"

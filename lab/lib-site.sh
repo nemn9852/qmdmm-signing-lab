@@ -179,9 +179,92 @@ key_fpr() {  # key_fpr <file>
 }
 
 # The fingerprint of the first signing subkey in a key file.
+#
+# "First" is only the right answer while a line has never been rotated. Use
+# live_sub_fpr below for anything that hands the fingerprint to a tool.
 first_sub_fpr() {  # first_sub_fpr <file>
   gpg --with-colons --show-keys "$1" 2>/dev/null \
     | awk -F: '/^sub:/{f=1;next} f&&/^fpr:/{print $10; exit}'
+}
+
+# The fingerprint of the first subkey that can actually sign - i.e. not revoked,
+# expired, disabled or invalid - or nothing if there is none.
+#
+# Why this exists: a rotated line's key file is
+#     root + outgoing[revoked] + incoming
+# and gpg lists the subkeys in that order, so `first_sub_fpr` returns the
+# REVOKED one. Handing that to `pacman-key --lsign-key` locally signs a key that
+# can no longer sign anything, and the database - signed by the incoming subkey
+# - is then refused. From the outside that is a consumer cell going red on the
+# day a line was rotated, which is the day nobody wants to debug the harness.
+# (The debian line has carried a revoked subkey since its first rotation; it is
+# only invisible because no apt cell ever asks "which subkey".)
+#
+# gpg's `--with-colons` validity field is one of u/i/d/r/e/o/q/n/-; anything but
+# revoked/expired/disabled/invalid is usable.
+live_sub_fpr() {  # live_sub_fpr <file>
+  gpg --with-colons --show-keys "$1" 2>/dev/null \
+    | awk -F: '/^pub:/{f=0} /^sub:/{s=$2;f=1} /^fpr:/{if(f){if(s !~ /^[redi]$/){print $10; exit} f=0}}'
+}
+
+# How many subkeys a key file carries in a non-usable state - which for this lab
+# is "how many times this line has been rotated".
+dead_subkeys() {  # dead_subkeys <file>
+  gpg --with-colons --show-keys "$1" 2>/dev/null \
+    | awk -F: '/^sub:/{if ($2 ~ /^[redi]$/) n++} END{print n+0}'
+}
+
+# The fingerprint of the first subkey that is NOT usable - for a line that has
+# been rotated, the outgoing subkey. Paired with live_sub_fpr it is what makes
+# "these two key files are two states of one line" an assertion rather than a
+# hope: the revoked subkey in the refreshed file must BE the live subkey of the
+# un-refreshed one.
+dead_sub_fpr() {  # dead_sub_fpr <file>
+  gpg --with-colons --show-keys "$1" 2>/dev/null \
+    | awk -F: '/^pub:/{f=0} /^sub:/{s=$2;f=1} /^fpr:/{if(f){if(s ~ /^[redi]$/){print $10; exit} f=0}}'
+}
+
+# fetch_row_metadata <base-url> <fmt> <dest-dir>
+#
+# Take down one published repository's metadata only - no packages. Used both by
+# stage C (which tampers with a copy of a published repository) and by the
+# rotation tool (which freezes a repository as it was immediately before a line's
+# key was rotated). Both want the same thing and neither wants the packages, so
+# the repodata filename hashes are read out of repomd.xml rather than guessed.
+fetch_row_metadata() {
+  local base="$1" fmt="$2" r="$3" d f
+  # The destination directory is created here for every format, not inside the
+  # branches: the pacman one used to assume the caller had made it, and curl
+  # reports a missing parent as "Failure writing output to destination ...
+  # returned 4294967295", which names neither the file nor the directory.
+  mkdir -p "$r"
+  case "$fmt" in
+    deb)
+      d="$r/dists/$VERSION"
+      mkdir -p "$d/main/binary-all"
+      fetch "$base/dists/$VERSION/InRelease"                   "$d/InRelease"
+      fetch "$base/dists/$VERSION/Release"                     "$d/Release"
+      fetch "$base/dists/$VERSION/main/binary-all/Packages"    "$d/main/binary-all/Packages"
+      fetch "$base/dists/$VERSION/main/binary-all/Packages.gz" "$d/main/binary-all/Packages.gz"
+      ;;
+    rpm)
+      mkdir -p "$r/repodata"
+      fetch "$base/repodata/repomd.xml"     "$r/repodata/repomd.xml"
+      fetch "$base/repodata/repomd.xml.asc" "$r/repodata/repomd.xml.asc"
+      # The rest of repodata is named with a hash, so it is read out of
+      # repomd.xml instead of being guessed.
+      local -a more=()
+      mapfile -t more < <(grep -o 'href="repodata/[^"]*"' "$r/repodata/repomd.xml" \
+                          | sed 's/^href="//; s/"$//' | sort -u)
+      [ "${#more[@]}" -ge 1 ] || { echo "  !! repomd.xml names no other metadata file"; return 1; }
+      for f in "${more[@]}"; do fetch "$base/$f" "$r/$f"; done
+      ;;
+    pac)
+      fetch "$base/lab.db"     "$r/lab.db"
+      fetch "$base/lab.db.sig" "$r/lab.db.sig"
+      ;;
+    *) echo "  !! no metadata layout known for format '$fmt'"; return 1 ;;
+  esac
 }
 
 count_subkeys() {  # count_subkeys <file>

@@ -49,6 +49,9 @@ echo
 echo "--- the two public states of one key ---"
 fetch "$PAGES/keys/revoked-fixture-before.gpg" "$W/keys/before.gpg"
 fetch "$PAGES/keys/revoked-fixture.gpg"        "$W/keys/after.gpg"
+# `first_sub_fpr`, NOT `live_sub_fpr`, and deliberately - see the note in
+# consume-revoked-dnf.sh: the "after" file's only subkey is the revoked one, so
+# asking for a usable subkey would return nothing.
 sub_before=$(first_sub_fpr "$W/keys/before.gpg")
 sub_after=$(first_sub_fpr "$W/keys/after.gpg")
 echo "  before: subkey $sub_before"
