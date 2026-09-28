@@ -2,13 +2,13 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: forky
 Codename: forky
-Date: Mon, 28 Sep 2026 15:04:15 UTC
+Date: Mon, 28 Sep 2026 15:21:59 UTC
 Architectures: all
 Components: main
 Description: QMdmm debian forky repository
 MD5Sum:
- b9a5f7e9f70c6f92f5aeac02391497d4             1940 main/binary-all/Packages
- 539508e8680cef80fe7b877109f310a3              723 main/binary-all/Packages.gz
+ bc873d593447d2d62147a692da453b2b             1940 main/binary-all/Packages
+ a7605bafded9cb0810777ce6af922249              727 main/binary-all/Packages.gz
 SHA256:
- 32140cb967e5225abda634e5de8e715ea3fbacc001f56bf045c92234a5e538c4             1940 main/binary-all/Packages
- f840549b9b06ec7af0cc3ae2669b9f878848cebfac5cdf934b8546aab51347b8              723 main/binary-all/Packages.gz
+ d347ec9d931e8fa3b239a57c580596cf29a0e4f60184e2f2c9cc517b79506284             1940 main/binary-all/Packages
+ b7d7d49e86cf73cb0850a9f5ddd288290ece24da6b8ec6c6abcc8b0054de08c7              727 main/binary-all/Packages.gz
