@@ -64,6 +64,7 @@ echo "--- tooling ---"
 dnf install -y -q gnupg2 curl ca-certificates </dev/null >/dev/null 2>&1 || true
 echo "  rpmsign exists: $(command -v rpmsign || echo no)"
 echo "  curl: $(command -v curl || echo MISSING)"
+assert_tls "$PAGES/publish.json" || exit 1
 
 echo
 echo "--- wait for the site to serve this run's publish ---"

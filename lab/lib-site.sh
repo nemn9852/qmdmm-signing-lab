@@ -25,11 +25,18 @@ wait_for_publish() {
     # so swallow it and treat "no answer" as "not yet".
     raw=$(curl -fsSL --max-time 15 \
                 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
-                "$pages/publish.json?cb=${RANDOM}${RANDOM}" 2>/dev/null || true)
+                "$pages/publish.json?cb=${RANDOM}${RANDOM}" 2>&1 || true)
     got=$(printf '%s' "$raw" | tr -d ' \n' | sed -n 's/.*"sha":"\([0-9a-f]*\)".*/\1/p')
     if [ "$got" = "$expect" ]; then
       echo "  site is live at ${got:0:7} (waited ${i} poll(s))"
       return 0
+    fi
+    # What came back matters, and the first attempt is where to say it. "nothing"
+    # can mean a deploy that has not landed yet, or a request that never got off
+    # the ground - no CA bundle in the container, no resolver - and sitting out
+    # fifteen minutes on the second one is not patience, it is a wrong diagnosis.
+    if [ "$i" = 1 ]; then
+      echo "  first attempt returned: $(printf '%s' "$raw" | head -c 200)"
     fi
     echo "  waiting for the deploy to catch up (site currently serves: ${got:-nothing})"
     sleep 10
@@ -82,7 +89,12 @@ dnf_packages() {  # dnf_packages <repo-id> <workdir>
     } >&2
     return 1
   fi
-  printf '%s\n' "$out"
+  # Normalised to one name per line whatever separator dnf picked. `--qf` is
+  # applied to each package in turn, so whether the names come out newline-
+  # separated depends on the format string being honoured - and on the observed
+  # behaviour of one line they did not, arriving space-separated instead. Asking
+  # the question in terms of whitespace makes the answer independent of that.
+  printf '%s\n' "$out" | tr -s '[:space:]' '\n' | grep -v '^$'
 }
 
 # The distribution's own name, for the log line.
@@ -99,6 +111,19 @@ os_name() {
   v=$(sed -n 's/^PRETTY_NAME="\(.*\)"$/\1/p' /etc/os-release 2>/dev/null | head -1)
   [ -n "$v" ] || v=$(sed -n 's/^PRETTY_NAME=//p' /etc/os-release 2>/dev/null | head -1)
   printf '%s' "${v:-unknown}"
+}
+
+# Every fetch in these scripts is https, and a container with no CA bundle fails
+# all of them. That failure surfaces far away - as "the site never served ...",
+# fifteen minutes later, reading like a deploy problem - so it gets asked about
+# directly, once, right after the tooling is installed.
+assert_tls() {  # assert_tls <url>
+  if ! curl -fsSL --max-time 20 -o /dev/null "$1?cb=cacert"; then
+    echo "  !! curl cannot complete a TLS request to $1"
+    echo "     (a container without a CA bundle looks exactly like this)"
+    return 1
+  fi
+  echo "  curl reaches the site over TLS: yes"
 }
 
 # fetch <url> <dest> - public material only, and it says so in the log, because

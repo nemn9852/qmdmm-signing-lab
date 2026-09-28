@@ -51,6 +51,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq </dev/null
 apt-get install -y -qq --no-install-recommends gnupg curl ca-certificates </dev/null
 echo "  gnupg $(gpg --version | head -1 | sed 's/^gpg (GnuPG) //')"
+assert_tls "$PAGES/publish.json" || exit 1
 
 echo
 echo "--- wait for the site to serve this run's publish ---"
@@ -117,14 +118,20 @@ cat "$src" | sed 's/^/  | /'
 # The exit code is deliberately NOT the assertion here. apt-get update falls back
 # to the index files it already has when a source fails to verify, prints only
 # warnings, and returns 0 - the same shape of trap as FINDINGS 3.2, in the other
-# package manager. So the index is cleared first and the question asked is the
-# one that actually matters: can apt still see a package from a source whose
-# signature it just rejected?
+# package manager. So the index is cleared first, and the question asked is
+# whether anything from that source got written into it.
 rm -rf /var/lib/apt/lists/*
 apt-get update -o Dir::Etc::sourcelist="$src" -o Dir::Etc::sourceparts="$W/none" \
        > "$W/neg.log" 2>&1 || true
-if apt-cache search --names-only '^qmdmm' | cut -d' ' -f1 | grep -q .; then
-  echo "  !! apt still lists packages from a source signed under a key it does not hold"
+# What is asked is whether anything from that source got written into the index,
+# and NOT "can apt-cache see a qmdmm package": qmdmm-6 was installed by the
+# successful half above, so apt-cache answers from the dpkg status file whatever
+# the repository did - which is exactly how this assertion was green when it
+# should have been red.
+adopted=$(find /var/lib/apt/lists -maxdepth 1 -type f -name '*Packages*' | wc -l | tr -d ' ')
+if [ "$adopted" != 0 ]; then
+  echo "  !! apt adopted $adopted index file(s) from a source signed under a key it does not hold"
+  find /var/lib/apt/lists -maxdepth 1 -type f -name '*Packages*' | sed 's/^/    /'
   sed 's/^/    /' "$W/neg.log"; exit 1
 fi
 echo "  OK: refused, as it must be"

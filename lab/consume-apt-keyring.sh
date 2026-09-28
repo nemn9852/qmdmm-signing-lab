@@ -45,6 +45,7 @@ apt-get install -y -qq --no-install-recommends gnupg gpgv curl ca-certificates <
 command -v gpgv >/dev/null \
   || { echo "  !! gpgv is missing, and every check below is written against it"; exit 1; }
 echo "  gpgv: $(command -v gpgv)"
+assert_tls "$PAGES/publish.json" || exit 1
 
 echo
 echo "--- wait for the site to serve this run's publish ---"

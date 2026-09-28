@@ -217,6 +217,36 @@ rejected the signature. What works instead is to clear `/var/lib/apt/lists`
 first and then ask what apt can still see: if `apt-cache search` can list a
 package from that source, the source was accepted, whatever the exit status said.
 
+### 3.12 An assertion that reads the wrong source is green for the wrong reason
+
+After §3.11 the apt negative check was rewritten to clear the index and then ask
+"can any qmdmm package still be seen". It was red in the next run - and wrongly,
+because `apt-cache` answers that question out of **the dpkg status file** as well
+as the index, and the positive half of the same job had just installed `qmdmm-6`.
+So the check reported "apt still lists packages from a source it does not hold"
+for a source apt had rejected.
+
+The fix is to ask the narrower question the mechanism actually supports: after
+clearing `/var/lib/apt/lists`, did anything from that source get written into
+it? Counting `*Packages*` files at depth 1 is an answer about the repository;
+asking `apt-cache` is an answer about the machine.
+
+This is the §3.7 family again - the control has to be the same object - with a
+different costume: the observation has to be the same mechanism.
+
+### 3.13 A container can have curl and no trust store
+
+Two cells waited fifteen minutes for a deploy, reporting
+`site currently serves: nothing` the whole time. The deploy was fine. Both were
+containers whose tooling step installed `curl` and **not** `ca-certificates`, so
+every https request failed at the TLS handshake - and the only symptom, fifteen
+minutes later, was upstream of the cause and pointed at Pages.
+
+Two habits come out of it: install the trust store wherever curl is installed,
+and ask the TLS question directly once, immediately after the tooling, so the
+failure takes seconds and names itself. `assert_tls` in `lib-site.sh` does the
+second.
+
 ## 4. rpm is not one behaviour, and it is not an algorithm problem
 
 The lab assumed one rpm line would stand in for all rpm distros. That is wrong,

@@ -40,10 +40,14 @@ echo "--- tooling ---"
 case "$FMT" in
   deb) export DEBIAN_FRONTEND=noninteractive
        apt-get update -qq </dev/null
-       apt-get install -y -qq --no-install-recommends gnupg curl gzip </dev/null ;;
-  rpm) dnf install -y -q gnupg2 curl </dev/null >/dev/null 2>&1 || true ;;
-  pac) pacman -Sy --noconfirm --needed gnupg curl >/dev/null 2>&1 || true ;;
+       apt-get install -y -qq --no-install-recommends gnupg curl gzip ca-certificates </dev/null ;;
+  rpm) dnf install -y -q gnupg2 curl ca-certificates </dev/null >/dev/null 2>&1 || true ;;
+  pac) pacman -Sy --noconfirm --needed gnupg curl ca-certificates >/dev/null 2>&1 \
+         || pacman -S --noconfirm --needed gnupg curl ca-certificates-mozilla >/dev/null 2>&1 || true ;;
 esac
+# Every fetch below is https, so a missing CA bundle would present itself as
+# "the site never served ..." several minutes later.
+assert_tls "$PAGES/publish.json" || exit 1
 
 echo
 echo "--- wait for the site to serve this run's publish ---"
