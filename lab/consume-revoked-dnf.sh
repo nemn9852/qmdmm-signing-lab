@@ -74,9 +74,14 @@ echo "--- A) the pre-revocation key must accept the repository ---"
 write_repo "$W/keys/before.gpg"
 rm -rf /var/cache/dnf /var/cache/libdnf5; dnf clean all >/dev/null 2>&1 || true
 dnf -y -q makecache > "$W/a.log" 2>&1 || true
-if grep -qiE 'signature verification error|GPG check FAILED' "$W/a.log"; then
-  echo "  !! the control was refused, so the second half would mean nothing:"
-  sed 's/^/    /' "$W/a.log"; exit 1
+echo "  --- what dnf said ---"
+sed 's/^/    /' "$W/a.log"
+# The mirror of the assertion in the second half: no signature complaint here.
+# That is the entire difference between the two halves - one artifact, one
+# configuration, one key file apart.
+if grep -qiE 'signature verification error|GPG check FAILED|Bad PGP signature|Signing key not found' "$W/a.log"; then
+  echo "  !! the control was refused, so the second half would mean nothing"
+  exit 1
 fi
 echo "  OK: accepted (an empty repository, as designed - the metadata verified)"
 
@@ -85,13 +90,23 @@ echo "--- B) the SAME key, with its revocation certificate, must refuse it ---"
 write_repo "$W/keys/after.gpg"
 rm -rf /var/cache/dnf /var/cache/libdnf5; dnf clean all >/dev/null 2>&1 || true
 dnf -y -q makecache > "$W/b.log" 2>&1 || true
+echo "  --- what dnf said ---"
+sed 's/^/    /' "$W/b.log"
+# Two assertions, because either one alone can be satisfied for the wrong reason.
+# "dnf lists no package" is true of an EMPTY repository whether or not the
+# signature was accepted - and this fixture is empty on purpose, so that check on
+# its own would pass with revocation doing nothing at all. The refusal has to be
+# visible in what dnf says about the signature; only then does the second
+# assertion mean what it looks like it means.
+if ! grep -qiE 'signature verification error|GPG check FAILED|Bad PGP signature|Signing key not found' "$W/b.log"; then
+  echo "  !! dnf reported no signature problem - so any refusal here has another cause"
+  exit 1
+fi
 mapfile -t seen < <(dnf_packages "$REPO" "$W" || true)
 if [ "${#seen[@]}" -ge 1 ]; then
   echo "  !! dnf accepted metadata signed by a revoked key: ${seen[*]}"; exit 1
 fi
-echo "  OK: refused, as it must be"
-echo "  --- what dnf actually said (for the record) ---"
-grep -iE 'revok|signature|GPG|key' "$W/b.log" | head -6 | sed 's/^/    /' || true
+echo "  OK: refused, and it said why"
 
 echo
 echo "=== B/revoked (rpm, dnf): PASS ==="
