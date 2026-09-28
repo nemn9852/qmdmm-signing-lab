@@ -632,3 +632,44 @@ Checked rather than assumed, because a job that skips its work is also green:
 
   The human-readable line says **Good signature**. The status stream says
   `REVKEYSIG`. An assertion built on the first would have passed.
+
+### 10.7 What this lab does **not** cover
+
+Written down because an unverified thing that is not labelled as unverified tends
+to be read as a verified one.
+
+- **Revocation is only exercised on the debian line, and only against `gpgv`.**
+  There is one revoked fixture (`site/debian-revoked`), produced by the one
+  rotation script that exists (`rotate-debian-local.sh`, whose `case` accepts
+  `debian` and nothing else), and it is verified by the one cell that reads it
+  (`consume-apt-keyring.sh`). So §3.1's finding - that revocation is only as good
+  as the verifier - is *demonstrated* for `gpgv` (apt's backend) and **unknown for
+  `dnf` and `pacman`**. Whether dnf refuses a `repomd.xml` signed by a revoked
+  subkey, or pacman a database, has not been measured here at all.
+
+- **The other lines' key files carry no revoked subkey.** Only
+  `keys/debian/qmdmm-packages.gpg` does, because that is what the rotation script
+  deliberately does (so a consumer sees "revoked" rather than "unknown key").
+  Every other line ships root plus one live subkey, so if one of them were
+  revoked a consumer would report an unknown key - a worse diagnosis, and a
+  different code path from the one tested.
+
+- **The keyring *package* is never consumed.** `mkkeyring-deb.sh` builds
+  `qmdmm-archive-keyring`, which is the thing an actual user installs to get both
+  sources configured, and nothing in CI installs it. What gets verified is the
+  keyring *source* being signed by the root key alone; "install this package and
+  both repositories are configured and trusted" is a claim with no witness.
+
+- **Only the deb format has a keyring/trust-artefact mechanism built at all.**
+  The rpm `*-release` package and the pacman keyring package that
+  distro-repo-trust-packaging describes do not exist in this lab - that is a
+  mechanism not yet built, rather than a check that is missing.
+
+- **`stage-c-taint` covers four (format, consumer) pairs, not twelve rows**, on
+  purpose: tamper detection is a property of the format and the refusal is a
+  property of the verifying program, so twelve versions would repeat the same
+  four mechanisms. The assumption that costs something is "one verifier per
+  family" - and fedora:43, where the same dnf5 at a different patch level
+  behaved differently, is a counter-example to exactly that assumption. Cells
+  here are cheap (metadata only, no package installation), so filling in the
+  other eight rows is a reasonable thing to want.
