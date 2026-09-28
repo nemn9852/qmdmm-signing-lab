@@ -247,6 +247,47 @@ and ask the TLS question directly once, immediately after the tooling, so the
 failure takes seconds and names itself. `assert_tls` in `lib-site.sh` does the
 second.
 
+### 3.14 Revoked subkeys are invisible by default, so "revoked" reads as "absent"
+
+`gpg --list-keys` omits revoked subkeys. On this lab's keyring:
+
+    gpg --list-keys                                      | grep -c '^sub'  ->  7
+    gpg --list-keys --list-options show-unusable-subkeys | grep -c '^sub'  -> 11
+
+The four it hides are exactly the four revoked ones. `--with-colons` shows them
+too, `sub:r:` in the validity field and a `fpr` line to identify them.
+
+That default is how a *revoked* subkey gets read as an *absent* one, and
+"absent" does not stay "absent" on a second visit: the follow-up reading is "an
+unused subkey that was never revoked" - the shape of a live key nobody is
+tracking, which is the one thing here worth panicking about. The lab's
+first-generation debian subkey is the worked example. `5779CAB6…`
+(`22F94DB1069D1F24505CB5675779CAB6443DA554`, created 2026-09-27 09:33 together
+with the root key and the fedora/arch subkeys, and the key whose absence is §1's
+`Missing key …` evidence) does not appear in `gpg --list-keys` at all. It is
+revoked anyway - by the root key, at 2026-09-27 10:00:07, the same second its
+successor `77E9E913…` was added.
+
+The debian key file's history is the record, one commit per generation:
+
+    94a15c4  root + 5779CAB6                          (gen 1, live)
+    a81d76f  root + 5779CAB6[revoked] + 77E9E913      (rotation 1)
+    b70a2d2  root + 77E9E913[revoked] + 3F4622CC      (rotation 2)
+
+so the debian line was rotated **twice**, and each export carries the outgoing
+subkey *with* its revocation certificate on purpose - that is what lets a
+consumer report "revoked" rather than "unknown key". Nothing else carries it: no
+other key file, no workflow, no published path. The site's `keys/` was checked
+over Pages rather than from the working tree, and holds no trace of it. Its only
+mention in the repository is §1's rejection message, where it is evidence rather
+than a key.
+
+Two ways to make `gpg` answer the question instead of inferring it: attempt a
+signature with the subkey (`Unusable secret key` when revoked), and read the
+subkey's packets directly (`sigclass 0x28`, a revocation signature from the key
+that owns it). The lab's keyring holds eleven subkeys, seven live - one per line
+- and none of the four revoked ones is reachable from anything published.
+
 ## 4. rpm is not one behaviour, and it is not an algorithm problem
 
 The lab assumed one rpm line would stand in for all rpm distros. That is wrong,
