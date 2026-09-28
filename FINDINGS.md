@@ -587,21 +587,48 @@ is `--qf '%{name}\n'`. The three-way fallback (`--qf`, `--queryformat`,
 `list --available`) is kept anyway: it costs one failed command, and the third
 shape is genuinely different rather than a spelling of the other two.
 
-### 10.5 The first run: 26 green, 17 red, and two causes
+### 10.5 Six runs to green, and not one of the failures was about signing
 
-A and S went 12/12, `publish` assembled the site correctly, and every one of the
-seventeen cells that failed did so for one of two reasons - neither of them about
-signing:
+A and S were 12/12 from the first run, and `publish` assembled a correct site
+from the first run. Everything that took six runs was in the consumer half, and
+every single one of them was mechanical:
 
-- **Sixteen cells** (§3.10) had their `VERSION` overwritten by
-  `/etc/os-release`, so every repository URL was malformed. One root cause for all
-  twelve consumers and all four taint cells.
-- **`stage-b-keyring`** died on `gpgv: command not found`. `gpgv` is a separate
-  package on Debian and `gnupg` does not depend on it, so installing `gnupg` was
-  not enough for a script written entirely against `gpgv`. The script had even
-  printed `gpgv: ` with an empty value and then carried on, which is the §3.9
-  lesson arriving again in a smaller size - so it now asserts the tool exists.
+| run | green | what the red cells turned out to be |
+|---|---|---|
+| 1 | 26/43 | `/etc/os-release` overwriting `VERSION` in 16 cells (§3.10); `gpgv` not installed in the keyring cell (§10.2) |
+| 2 | 27/43 | apt verifying as `_apt` and unable to read a 0700 keyring; `--qf '%{name}'` without its newline (§10.4); dnf4 answering "no" to an unanswerable key-import prompt; pacman's keyring having no secret key to sign with |
+| 3 | 28/43 | a diagnostic written to stdout being read back as a package name; "the update must fail" as an assertion (§3.11); the same missing secret key in stage C; two containers with curl and no CA bundle (§3.13) |
+| 4 | 34/43 | the apt assertion reading the dpkg status file instead of the index (§3.12); dnf returning names space-separated instead of newline-separated |
+| 5 | 41/43 | `gpgv` missing again - in the one file not updated when §10.2 was fixed; Manjaro's `curl` broken by a partial upgrade |
+| 6 | **43/43** | - |
 
-The useful part is what the log made obvious once it was read: both failures
-announced themselves in the first twenty lines, and neither was a signature
-problem.
+Two things are worth taking from this. The first is that the failures clustered
+by *mechanism*, not by distribution: one cause took out five apt cells, another
+took out six dnf cells, and the fix for each was one line in one script.
+
+The second is that the diagnostics are what shortened the loop. The run that
+took two hours has a `curl: symbol lookup error: ... ngtcp2_conn_...` in it
+after eleven seconds, because the TLS question is asked directly instead of
+being inferred from fifteen minutes of "the site never served ...".
+
+### 10.6 What the green cells actually did
+
+Checked rather than assumed, because a job that skips its work is also green:
+
+- every consumer row installed the real runtime package from the published
+  repository - `qmdmm-6 0.0.2` on apt, `qmdmm-6-0.0.2-1.x86_64` on rpm,
+  `qmdmm-6 0.0.1-1` on pacman - and each compared the served package set against
+  the one stage A built;
+- every consumer row also refused the same repository when only the root key was
+  available, which is the half that makes the per-line subkey mean something;
+- all four stage C cells refused the tampered copy, having first accepted the
+  untouched one;
+- and the keyring cell demonstrated §3.1 in its own log rather than merely
+  testing for it:
+
+      gpgv: Good signature from "QMdmm Signing Lab Root <root@qmdmm-lab.invalid>"
+      [GNUPG:] REVKEYSIG 77E9E913C4BC3F61 QMdmm Signing Lab Root <root@qmdmm-lab.invalid>
+      OK: reported as signed by a revoked key, not accepted as good
+
+  The human-readable line says **Good signature**. The status stream says
+  `REVKEYSIG`. An assertion built on the first would have passed.
