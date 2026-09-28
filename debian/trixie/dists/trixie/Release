@@ -2,13 +2,13 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: trixie
 Codename: trixie
-Date: Mon, 28 Sep 2026 00:32:39 UTC
+Date: Mon, 28 Sep 2026 00:49:51 UTC
 Architectures: all
 Components: main
 Description: QMdmm debian trixie repository
 MD5Sum:
- c1d900b68af21a3724288ae376ff175b             1939 main/binary-all/Packages
- aef0c5dc096910838e0b82596321c2e6              729 main/binary-all/Packages.gz
+ 6947f2c27f244af2c918376ea4371681             1939 main/binary-all/Packages
+ b5947aa6a479f338c5ce88dc5a01d906              725 main/binary-all/Packages.gz
 SHA256:
- 4a9c09bc8afacac29b2f2ba3b9ab6e2d0b17f648b8064e5e294757231e927243             1939 main/binary-all/Packages
- 21201586d4d178189b75925662faa54a410dfbf215c074504791c92dc0a382d6              729 main/binary-all/Packages.gz
+ 36148ffe365cba029d6569fb226d46475789452d4e2a93073fb5528037f284e6             1939 main/binary-all/Packages
+ 101e5f9e1cd051ba10988d5361e43c6f8eeecd2e464b6f86ce3b33f87b398358              725 main/binary-all/Packages.gz
