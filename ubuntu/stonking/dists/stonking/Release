@@ -2,13 +2,13 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: stonking
 Codename: stonking
-Date: Mon, 28 Sep 2026 15:21:58 UTC
+Date: Mon, 28 Sep 2026 15:34:10 UTC
 Architectures: all
 Components: main
 Description: QMdmm ubuntu stonking repository
 MD5Sum:
- c7c5d10cd18db211c786b7ce7d623f8c             1940 main/binary-all/Packages
- 151e86578d63f64f331d2bf776df4cb3              722 main/binary-all/Packages.gz
+ 5c67e62d6a3724bea920b8cf70b635c7             1940 main/binary-all/Packages
+ 47df0b535c0540b4df1f71c28b229cea              721 main/binary-all/Packages.gz
 SHA256:
- 8eeefca72c4d0721075c8971a325665406ad6ef893b2e85504ab179e60d75858             1940 main/binary-all/Packages
- 9fe68e1b402c7fc1961df65b5760a03c2964c4be2ad572743daf8cd5434477c3              722 main/binary-all/Packages.gz
+ 9dd73fe1a4fb81b2a9018d3418075a7de95cbe2201cf81a09b38a312743f007e             1940 main/binary-all/Packages
+ e7e2c29777aab039f1e3c343f14d34d8687eea15d5d72010add35a23f3991ccc              721 main/binary-all/Packages.gz
