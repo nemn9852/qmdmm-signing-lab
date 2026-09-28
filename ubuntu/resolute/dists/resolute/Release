@@ -2,13 +2,13 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: resolute
 Codename: resolute
-Date: Mon, 28 Sep 2026 05:10:45 UTC
+Date: Mon, 28 Sep 2026 05:20:18 UTC
 Architectures: all
 Components: main
 Description: QMdmm ubuntu resolute repository
 MD5Sum:
- 143a34a10f327150265280a5b11b3cef             1940 main/binary-all/Packages
- c56a4a358d9d1148793f50effb966a28              725 main/binary-all/Packages.gz
+ 8cafc3e5bdf59e883ad0dcaabd366720             1940 main/binary-all/Packages
+ 363568730128b7bd896d3cf8573e549f              721 main/binary-all/Packages.gz
 SHA256:
- 266d6f6d68941ce1ef0ac83ec7250c93f95c079b3440674f9dc40d730c8ffba7             1940 main/binary-all/Packages
- 90af2886e5832b5d36ba079daca6fbeb30e12c3e8fb95e9a6dd88448b7d70ff1              725 main/binary-all/Packages.gz
+ 7e828c65d202a9bd71bfe4dda1204b4f0e45040536825317b7640f893c9a6c11             1940 main/binary-all/Packages
+ 5b6d25f361e6e8c3c1c0a1dff516fc23b8df8dfd244635059f60f6dc5e531a76              721 main/binary-all/Packages.gz
