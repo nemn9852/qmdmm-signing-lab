@@ -33,7 +33,7 @@ source "$(dirname "$0")/lib-site.sh"
 REPO=lab
 
 echo "=== B/pacman $LINE $VERSION ==="
-. /etc/os-release && echo "  $PRETTY_NAME"
+echo "  $(os_name)"
 echo "  pacman: $(pacman --version | head -1)"
 
 echo
@@ -47,10 +47,21 @@ grep -E '^\s*Server' /etc/pacman.d/mirrorlist | head -3 | sed 's/^/  /'
 
 echo
 echo "--- tooling ---"
-pacman -Sy --noconfirm --needed archlinux-keyring gnupg curl >/dev/null 2>&1 || true
-echo "  gpg:   $(command -v gpg || echo MISSING)"
-echo "  curl:  $(command -v curl || echo MISSING)"
-
+# Asking for `archlinux-keyring` by name would fail on the Manjaro row (that
+# package does not exist there), and pacman installs all-or-nothing, so the
+# failure would have taken gnupg and curl down with it.
+pacman -Sy --noconfirm --needed gnupg curl >/dev/null 2>&1 || true
+command -v gpg  >/dev/null || { echo "  !! gpg is missing"; exit 1; }
+command -v curl >/dev/null || { echo "  !! curl is missing"; exit 1; }
+# pacman-key needs gpg, so the keyring can only be initialised once the tools
+# above are actually present.
+if [ ! -s /etc/pacman.d/gnupg/trustdb.gpg ]; then
+  echo "  (initialising the pacman keyring)"
+  pacman-key --init
+  pacman-key --populate archlinux >/dev/null 2>&1 || true
+fi
+echo "  gpg:   $(command -v gpg)"
+echo "  curl:  $(command -v curl)"
 echo
 echo "--- wait for the site to serve this run's publish ---"
 wait_for_publish "$PAGES" "$EXPECT_SHA"

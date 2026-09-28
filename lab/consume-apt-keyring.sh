@@ -32,13 +32,18 @@ source "$(dirname "$0")/lib-site.sh"
 ROOT_KEYID="${ROOT_FPR: -16}"
 
 echo "=== B/keyring (root-signed source + revoked fixture) ==="
-. /etc/os-release && echo "  $PRETTY_NAME"
+echo "  $(os_name)"
 
 echo
 echo "--- tooling ---"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq </dev/null
-apt-get install -y -qq --no-install-recommends gnupg curl ca-certificates </dev/null
+# gpgv is its own package in Debian - gnupg does not pull it in - and this script
+# is written against gpgv, so it has to be asked for by name. (It was not, and
+# the first run got as far as `gpgv: command not found` before giving up.)
+apt-get install -y -qq --no-install-recommends gnupg gpgv curl ca-certificates </dev/null
+command -v gpgv >/dev/null \
+  || { echo "  !! gpgv is missing, and every check below is written against it"; exit 1; }
 echo "  gpgv: $(command -v gpgv)"
 
 echo

@@ -27,13 +27,13 @@ PAGES="${PAGES:?}"; LINE="${LINE:?}"; VERSION="${VERSION:?}"
 ROOT_FPR="${ROOT_FPR:?}"; EXPECT_SHA="${EXPECT_SHA:?}"; FMT="${FMT:?}"
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 R="$W/site"          # the local copy of the published repository
-mkdir -p "$W/keys" "$R"
+mkdir -p "$W/keys" "$W/none" "$R"
 source "$(dirname "$0")/lib-site.sh"
 
 BASE="$PAGES/$LINE/$VERSION"
 
 echo "=== C/taint $FMT ($LINE $VERSION) ==="
-. /etc/os-release && echo "  $PRETTY_NAME"
+echo "  $(os_name)"
 
 echo
 echo "--- tooling ---"
@@ -104,7 +104,7 @@ case "$FMT" in
       > /etc/apt/sources.list.d/qmdmm.list
     rm -rf /var/lib/apt/lists/*
     if ! apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/qmdmm.list \
-           -o Dir::Etc::sourceparts=/dev/null > "$W/control.log" 2>&1; then
+           -o Dir::Etc::sourceparts="$W/none" > "$W/control.log" 2>&1; then
       echo "  !! the control refresh failed, so nothing below would mean anything:"
       sed 's/^/    /' "$W/control.log"; exit 1
     fi
@@ -175,7 +175,7 @@ case "$FMT" in
   deb)
     rm -rf /var/lib/apt/lists/*
     if apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/qmdmm.list \
-           -o Dir::Etc::sourceparts=/dev/null > "$W/taint.log" 2>&1; then
+           -o Dir::Etc::sourceparts="$W/none" > "$W/taint.log" 2>&1; then
       echo "  !! apt accepted the tampered metadata"; sed 's/^/    /' "$W/taint.log"; exit 1
     fi
     grep -iE 'hash sum mismatch|does not match|failed' "$W/taint.log" | head -4 | sed 's/^/    /' || true

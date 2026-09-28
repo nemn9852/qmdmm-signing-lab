@@ -29,6 +29,22 @@ wait_for_publish() {
   return 1
 }
 
+# The distribution's own name, for the log line.
+#
+# This deliberately does NOT source /etc/os-release. Sourcing it would define
+# every variable that file happens to contain, and one of them is `VERSION` -
+# which is also an input of these scripts. On fedora:45 that silently turned
+# `VERSION=45` into `VERSION=45 (Container Image Prerelease)`, and the baseurl
+# was built as `.../fedora/45 (Container Image Prerelease)`, so every consumer
+# reported an empty repository. The trap is invisible until something that
+# embeds the variable in a URL fails.
+os_name() {
+  local v
+  v=$(sed -n 's/^PRETTY_NAME="\(.*\)"$/\1/p' /etc/os-release 2>/dev/null | head -1)
+  [ -n "$v" ] || v=$(sed -n 's/^PRETTY_NAME=//p' /etc/os-release 2>/dev/null | head -1)
+  printf '%s' "${v:-unknown}"
+}
+
 # fetch <url> <dest> - public material only, and it says so in the log, because
 # "the consumer got its keys from Pages" is a claim this lab has to be able to
 # point at.

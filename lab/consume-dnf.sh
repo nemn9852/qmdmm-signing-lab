@@ -63,7 +63,7 @@ EOF
 }
 
 echo "=== B/dnf $LINE $VERSION ==="
-. /etc/os-release && echo "  $PRETTY_NAME"
+echo "  $(os_name)"
 echo "  rpm: $(rpm --version)   $(dnf --version 2>/dev/null | head -1)"
 
 echo

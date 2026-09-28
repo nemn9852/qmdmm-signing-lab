@@ -19,7 +19,8 @@ if [ -z "$KEY_B64" ]; then IFS= read -r KEY_B64 || true; fi
 [ -n "$KEY_B64" ] || { echo "!! no signing key supplied"; exit 1; }
 
 echo "=== S/rpm $LINE ==="
-. /etc/os-release && echo "  $PRETTY_NAME"
+# Not `. /etc/os-release`: that defines ARCH too, which is an input here.
+echo "  $(sed -n 's/^PRETTY_NAME="\(.*\)"$/\1/p' /etc/os-release 2>/dev/null | head -1)"
 echo "  rpm: $(rpm --version)   dnf: $(dnf --version | head -1)   backend: $(rpm --eval '%_openpgp_sign' 2>/dev/null)"
 
 echo

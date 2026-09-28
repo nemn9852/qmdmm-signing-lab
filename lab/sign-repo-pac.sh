@@ -20,7 +20,7 @@ if [ -z "$KEY_B64" ]; then IFS= read -r KEY_B64 || true; fi
 [ -n "$KEY_B64" ] || { echo "!! no signing key supplied"; exit 1; }
 
 echo "=== S/pacman $LINE ==="
-. /etc/os-release && echo "  $PRETTY_NAME"
+echo "  $(sed -n 's/^PRETTY_NAME="\(.*\)"$/\1/p' /etc/os-release 2>/dev/null | head -1)"
 echo "  pacman: $(pacman --version | head -1)"
 
 echo

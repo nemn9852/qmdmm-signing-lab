@@ -25,7 +25,9 @@ if [ -z "$KEY_B64" ]; then IFS= read -r KEY_B64 || true; fi
 [ -n "$KEY_B64" ] || { echo "!! no signing key supplied"; exit 1; }
 
 echo "=== S/deb $LINE ($SUITE) ==="
-. /etc/os-release && echo "  $PRETTY_NAME"
+# Not `. /etc/os-release`: that also defines VERSION and ARCH, which are inputs
+# of scripts in this directory. lib-site.sh's os_name carries the story.
+echo "  $(sed -n 's/^PRETTY_NAME="\(.*\)"$/\1/p' /etc/os-release 2>/dev/null | head -1)"
 echo "  packages in:  $PKGS"
 echo "  repo out:     $OUT"
 ls -l "$PKGS" | sed 's/^/    /'

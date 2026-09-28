@@ -175,6 +175,27 @@ unreachable. Assertions about *absence* need the absence to be visible —
 Same shape as 3.7. When a check reports that something is not there, print what
 you asked and what came back, not just the conclusion.
 
+### 3.10 Sourcing `/etc/os-release` silently overwrites your own variables
+
+`. /etc/os-release && echo "  $PRETTY_NAME"` is the ordinary way to print which
+distribution a container is, and it is a trap for anything that also takes a
+`VERSION`: the file defines `VERSION`, `ID`, `HOME_URL` and a handful more, and
+sourcing it assigns every one of them over whatever the script already had.
+
+On `fedora:45` this turned `VERSION=45` into
+`VERSION=45 (Container Image Prerelease)`, and the repository URL was built as
+
+    .../fedora/45 (Container Image Prerelease)
+
+so all twelve consumer cells reported "the source served no qmdmm package at
+all" - a message that points at the repository, while the repository was fine.
+
+Worth noting what it did *not* break: the signing stage reads the same value as
+`SUITE`, a name this file does not define, so that stage stayed green throughout
+and gave no hint at all. The fix is a `sed -n 's/^PRETTY_NAME=…'` helper instead
+of renaming the variable, because renaming only defends against the collisions
+you happened to hit today.
+
 ## 4. rpm is not one behaviour, and it is not an algorithm problem
 
 The lab assumed one rpm line would stand in for all rpm distros. That is wrong,
@@ -507,3 +528,22 @@ two-option probe is deliberately harmless if that is wrong - it costs one failed
 command - but it has **not** been observed in this lab yet. If a later run shows
 dnf5 rejecting `--qf` and accepting `--queryformat`, this paragraph should be
 replaced with the measurement rather than kept as a hedge.
+
+### 10.5 The first run: 26 green, 17 red, and two causes
+
+A and S went 12/12, `publish` assembled the site correctly, and every one of the
+seventeen cells that failed did so for one of two reasons - neither of them about
+signing:
+
+- **Sixteen cells** (§3.10) had their `VERSION` overwritten by
+  `/etc/os-release`, so every repository URL was malformed. One root cause for all
+  twelve consumers and all four taint cells.
+- **`stage-b-keyring`** died on `gpgv: command not found`. `gpgv` is a separate
+  package on Debian and `gnupg` does not depend on it, so installing `gnupg` was
+  not enough for a script written entirely against `gpgv`. The script had even
+  printed `gpgv: ` with an empty value and then carried on, which is the §3.9
+  lesson arriving again in a smaller size - so it now asserts the tool exists.
+
+The useful part is what the log made obvious once it was read: both failures
+announced themselves in the first twenty lines, and neither was a signature
+problem.

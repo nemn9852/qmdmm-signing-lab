@@ -32,11 +32,11 @@ PAGES="${PAGES:?}"; LINE="${LINE:?}"; VERSION="${VERSION:?}"
 ROOT_FPR="${ROOT_FPR:?}"; EXPECT_SHA="${EXPECT_SHA:?}"
 PKGS="${PKGS:-}"
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
-mkdir -p "$W/keys" /etc/apt/sources.list.d
+mkdir -p "$W/keys" "$W/none" /etc/apt/sources.list.d
 source "$(dirname "$0")/lib-site.sh"
 
 echo "=== B/apt $LINE $VERSION ==="
-. /etc/os-release && echo "  $PRETTY_NAME"
+echo "  $(os_name)"
 echo "  apt: $(apt-get --version | head -1)"
 
 echo
@@ -70,11 +70,13 @@ echo "  OK: root and operational keys are different keys"
 
 echo
 echo "--- A) the day-to-day source, signed by this line's subkey ---"
-src="$W/qmdmm.list"
+# In sources.list.d rather than a scratch file: `apt-get install` below reads the
+# *configured* sources, so a source that only ever existed inside the `update`
+# invocation would be invisible at the moment the package is actually asked for.
+src=/etc/apt/sources.list.d/qmdmm.list
 echo "deb [signed-by=$W/keys/packages.gpg] $PAGES/$LINE/$VERSION $VERSION main" > "$src"
 cat "$src" | sed 's/^/  | /'
-if ! apt-get update -o Dir::Etc::sourcelist="$src" -o Dir::Etc::sourceparts=/dev/null \
-        -o APT::Get::List-Cleanup=0 > "$W/update.log" 2>&1; then
+if ! apt-get update > "$W/update.log" 2>&1; then
   echo "  !! apt-get update refused the source:"; sed 's/^/    /' "$W/update.log"; exit 1
 fi
 grep -i qmdmm "$W/update.log" | sed 's/^/    /' || true
@@ -99,10 +101,11 @@ apt-cache policy $runtime | grep -A1 -E '^\S' | sed 's/^/    /' | head -12
 
 echo
 echo "--- B) the same source with the ROOT key only -> must be refused ---"
-neg="$W/qmdmm-root-only.list"
-echo "deb [signed-by=$W/keys/root.gpg] $PAGES/$LINE/$VERSION $VERSION main" > "$neg"
-rm -rf /var/lib/apt/lists/*
-if apt-get update -o Dir::Etc::sourcelist="$neg" -o Dir::Etc::sourceparts=/dev/null \
+# The same file, the same suite, the same repository - only the key file
+# changes, so the refusal cannot come from anything else.
+echo "deb [signed-by=$W/keys/root.gpg] $PAGES/$LINE/$VERSION $VERSION main" > "$src"
+cat "$src" | sed 's/^/  | /'
+if apt-get update -o Dir::Etc::sourcelist="$src" -o Dir::Etc::sourceparts="$W/none" \
        > "$W/neg.log" 2>&1; then
   echo "  !! apt accepted a source signed by a subkey while holding only the root key"
   sed 's/^/    /' "$W/neg.log"; exit 1
