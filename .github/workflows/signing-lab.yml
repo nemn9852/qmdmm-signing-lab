@@ -379,6 +379,35 @@ jobs:
           EXPECT_SHA: ${{ github.sha }}
         run: bash "$PWD/lab/consume-apt-keyring.sh"
 
+  # ============ the other half of the trust bootstrap, and the half a user
+  # actually meets: the keyring source ships exactly one package, and installing
+  # it is supposed to leave both repositories configured and working. Nothing
+  # else in this workflow installs it, so without this cell the claim "install
+  # the package and you are set up" has no witness at all (FINDINGS 10.7).
+  stage-b-keyring-package:
+    name: "B keyring package (install it, then use only what it configured)"
+    needs: [publish]
+    runs-on: ubuntu-latest
+    container:
+      image: "debian:sid"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Confirm no secret is reachable (a consumer's position)
+        env:
+          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LEAK_CHECK:-}" ]; then
+            echo "!! secret visible without declaring an environment"; exit 1
+          fi
+          echo "OK: this job sees no secret (same position as a consumer)"
+      - name: Install the keyring package and use only what it configured
+        env:
+          PAGES: ${{ env.LAB_PAGES }}
+          ROOT_FPR: ${{ env.ROOT_FPR }}
+          EXPECT_SHA: ${{ github.sha }}
+        run: bash "$PWD/lab/consume-keyring-package.sh"
+
   # ================================================================= stage C
   # Tamper with one metadata file in a local copy of a published repository and
   # prove the consumer refuses it. One cell per (format, consumer) pair: the
