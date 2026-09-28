@@ -1,0 +1,14 @@
+Origin: QMdmm Signing Lab
+Label: QMdmm Signing Lab
+Suite: sid
+Codename: sid
+Date: Mon, 28 Sep 2026 00:32:39 UTC
+Architectures: all
+Components: main
+Description: QMdmm debian sid repository
+MD5Sum:
+ 435a284f595f8963db6bf6b5dd2c3d1e             1940 main/binary-all/Packages
+ 90c5d9e59c26840f43cf6ec5583a6247              723 main/binary-all/Packages.gz
+SHA256:
+ d3b0c186738478127cfbc1a6c2f1ff72c7d9ba0b34fc2f78a0ba57b6a1013219             1940 main/binary-all/Packages
+ 52837c75573707d912783247e60a16d3d850cbdd0895926c361bb6d9c80fba1e              723 main/binary-all/Packages.gz

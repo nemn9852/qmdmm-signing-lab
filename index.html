@@ -18,28 +18,50 @@ Root key — signs only keyring packages / *-release packages
 
 Per-distro operational subkeys — sign packages + repository metadata
 --------------------------------------------------------------------
+One subkey per distribution line, not per released version: the same subkey
+signs every version that line has (debian's three suites, fedora's three
+releases, and so on). Rotating a line means replacing one subkey.
+
   debian  52A6 DA92 508F 487E A0EC  6DF5 3F46 22CC 95CD BFB4
+  ubuntu  B773 A5F9 074C 14CA B78D  5532 6AD0 ED77 0A5F 803F
   fedora  0CB6 055F E24F CC8B EEFB  6D99 808E B86A 8399 B375
   rocky   D743 4719 FF39 FB0C 1864  DA0D EC44 64A9 8E83 0643
   alma    C127 1012 58DC C185 D36D  58AD A663 1EAC 4DDC 9F27
   arch    1D56 9E0B 4281 AA59 A132  17B0 B768 1D06 0915 9052
+  manjaro AED2 A646 F6D6 B78B BF8F  8321 1647 6548 17EC C19E
 
 These subkeys are bound to the root key above, so anyone holding the root
 public key can attribute their signatures without a new trust anchor.
 
 Repository roots
 ----------------
-One directory per line. &lt;pages> below is the site root, so a consumer's
-sources.list / baseurl points straight at it:
+Pages serves the gh-pages branch, and what lands there IS the repository
+layout: &lt;pages>/&lt;line>/&lt;version> is a repository root a consumer points
+straight at. One directory per (line, version) row that stage A built and
+stage S signed — twelve of them.
 
-  &lt;pages>/debian           day-to-day source (subkey-signed)           suite: sid
-  &lt;pages>/debian-keyring   keyring source (root-signed)                suite: sid
-  &lt;pages>/debian-revoked   fixture signed by a since-revoked subkey — must be
-                           rejected by anything holding the current keys
-  &lt;pages>/fedora           rpm, subkey-signed
-  &lt;pages>/rocky            rpm, subkey-signed
-  &lt;pages>/alma             rpm, subkey-signed
-  &lt;pages>/arch             pacman, subkey-signed
+  &lt;pages>/debian/trixie     apt      deb [signed-by=…] &lt;pages>/debian/trixie trixie main
+  &lt;pages>/debian/forky      apt      same shape, suite forky
+  &lt;pages>/debian/sid        apt      same shape, suite sid
+  &lt;pages>/ubuntu/resolute   apt      same shape, suite resolute
+  &lt;pages>/ubuntu/stonking   apt      same shape, suite stonking
+  &lt;pages>/fedora/44         rpm      baseurl=&lt;pages>/fedora/44
+  &lt;pages>/fedora/45         rpm      baseurl=&lt;pages>/fedora/45
+  &lt;pages>/fedora/rawhide    rpm      baseurl=&lt;pages>/fedora/rawhide
+  &lt;pages>/rocky/10          rpm      baseurl=&lt;pages>/rocky/10
+  &lt;pages>/alma/10           rpm      baseurl=&lt;pages>/alma/10
+  &lt;pages>/arch/rolling      pacman   Server = &lt;pages>/arch/rolling
+  &lt;pages>/manjaro/rolling   pacman   Server = &lt;pages>/manjaro/rolling
+
+Two directories are built OFF-CI — the root secret never enters a workflow —
+and publish stages them at their published path:
+
+  &lt;pages>/debian-keyring    keyring source, root-signed. Its InRelease is the
+                            one thing only the root key may sign, which is why
+                            this source exists separately from the day-to-day
+                            one.
+  &lt;pages>/debian-revoked    fixture signed by a since-revoked subkey — must be
+                            rejected by anything holding the current keys
 
 Two sources, two directories
 ----------------------------
@@ -49,33 +71,55 @@ keyring source being verifiable by the root key ALONE. So:
 
   keys/qmdmm-root.gpg               root public key only (no subkeys)
                                     -> the keyring repo's Signed-By
-  keys/&lt;distro>/qmdmm-packages.gpg  root public key + that line's subkey
+  keys/&lt;line>/qmdmm-packages.gpg    root public key + that line's subkey
                                     -> the day-to-day repo's Signed-By
+
+Every consumer in this lab takes its keys from &lt;pages>/keys/, which is what a
+consumer of a published repository does: there is no other channel.
 </pre><h2>Repository roots</h2><ul>
-<li><a href="debian/">debian/</a></li>
-<li><a href="debian-keyring/">debian-keyring/</a></li>
-<li><a href="debian-revoked/">debian-revoked/</a></li>
-<li><a href="fedora/">fedora/</a></li>
-<li><a href="rocky/">rocky/</a></li>
-<li><a href="alma/">alma/</a></li>
-<li><a href="arch/">arch/</a></li>
+<li><a href="alma/10/">alma/10/</a></li>
+<li><a href="arch/rolling/">arch/rolling/</a></li>
+<li><a href="debian-keyring/dists/">debian-keyring/dists/</a></li>
+<li><a href="debian-revoked/dists/">debian-revoked/dists/</a></li>
+<li><a href="debian/forky/">debian/forky/</a></li>
+<li><a href="debian/sid/">debian/sid/</a></li>
+<li><a href="debian/trixie/">debian/trixie/</a></li>
+<li><a href="fedora/44/">fedora/44/</a></li>
+<li><a href="fedora/45/">fedora/45/</a></li>
+<li><a href="fedora/rawhide/">fedora/rawhide/</a></li>
+<li><a href="keys/alma/">keys/alma/</a></li>
+<li><a href="keys/arch/">keys/arch/</a></li>
+<li><a href="keys/debian/">keys/debian/</a></li>
+<li><a href="keys/fedora/">keys/fedora/</a></li>
+<li><a href="keys/manjaro/">keys/manjaro/</a></li>
+<li><a href="keys/rocky/">keys/rocky/</a></li>
+<li><a href="keys/ubuntu/">keys/ubuntu/</a></li>
+<li><a href="manjaro/rolling/">manjaro/rolling/</a></li>
+<li><a href="rocky/10/">rocky/10/</a></li>
+<li><a href="ubuntu/resolute/">ubuntu/resolute/</a></li>
+<li><a href="ubuntu/stonking/">ubuntu/stonking/</a></li>
+<li><a href="debian-keyring/">debian-keyring/</a> (built off-CI)</li>
+<li><a href="debian-revoked/">debian-revoked/</a> (built off-CI)</li>
 </ul><h2>Tree</h2><pre>
-./alma/repodata/107a20e6a3dcfc21f69b719ecdb3c3874e152a57bd1c73cd6acf69d14bd5234c-primary.xml.zst
-./alma/repodata/d06ac716c3312d5111594c565cd1fdc75ccabede1298a3e869e2f5df76c73bc8-other.xml.zst
-./alma/repodata/e2593f095f3f8820e5dd80a1bfc5a720cd105453fdcc037a0e477f27f25153a4-filelists.xml.zst
-./alma/repodata/repomd.xml
-./alma/repodata/repomd.xml.asc
-./alma/tree-2.1.0-8.el10.x86_64.rpm
-./arch/lab.db
-./arch/lab.db.sig
-./arch/lab.db.tar.gz
-./arch/lab.db.tar.gz.sig
-./arch/lab.files
-./arch/lab.files.sig
-./arch/lab.files.tar.gz
-./arch/lab.files.tar.gz.sig
-./arch/qmdmm-lab-1.0-1-any.pkg.tar.zst
-./arch/qmdmm-lab-1.0-1-any.pkg.tar.zst.sig
+./alma/10/QMdmm-0.0.2-Linux-6.rpm
+./alma/10/QMdmm-0.0.2-Linux-dev-common.rpm
+./alma/10/QMdmm-0.0.2-Linux-dev6.rpm
+./alma/10/QMdmm-0.0.2-Linux-doc.rpm
+./alma/10/repodata/7c480c6b429c2dfb681d42516c95af66ad5d09b7d01a649b081131efa764f291-filelists.xml.zst
+./alma/10/repodata/ca429446d0bee8f5cefe269d5f19bd0f947289180226b1917cfce2e8f0fc1b0b-other.xml.zst
+./alma/10/repodata/e4c0666a14f8b291f1574e0d2098fec0e2260878b82153719c319bd1cc7f330c-primary.xml.zst
+./alma/10/repodata/repomd.xml
+./alma/10/repodata/repomd.xml.asc
+./arch/rolling/lab.db
+./arch/rolling/lab.db.sig
+./arch/rolling/lab.db.tar.gz
+./arch/rolling/lab.db.tar.gz.sig
+./arch/rolling/lab.files
+./arch/rolling/lab.files.sig
+./arch/rolling/lab.files.tar.gz
+./arch/rolling/lab.files.tar.gz.sig
+./arch/rolling/qmdmm-6-0.0.1-1-x86_64.pkg.tar.zst
+./arch/rolling/qmdmm-6-0.0.1-1-x86_64.pkg.tar.zst.sig
 ./debian-keyring/dists/sid/InRelease
 ./debian-keyring/dists/sid/Release
 ./debian-keyring/dists/sid/main/binary-all/Packages
@@ -84,27 +128,100 @@ keyring source being verifiable by the root key ALONE. So:
 ./debian-revoked/dists/sid/Release
 ./debian-revoked/dists/sid/main/binary-all/Packages
 ./debian-revoked/dists/sid/main/binary-all/Packages.gz
-./debian/dists/sid/InRelease
-./debian/dists/sid/Release
-./debian/dists/sid/main/binary-all/Packages
-./debian/dists/sid/main/binary-all/Packages.gz
-./fedora/repodata/010cf64f09b605e243c4d19db695917aa7d88459c565d85d97f94d039c07ae4d-primary.xml.zst
-./fedora/repodata/720ea3924b397c8b3ee42d13c7e41ae7e5218c061c71b3c6c8cbb5134b4d3049-other.xml.zst
-./fedora/repodata/97923c50cca033d746b0109585b2c1c059fd4679437785e4f485a2d6e6e96c9e-filelists.xml.zst
-./fedora/repodata/repomd.xml
-./fedora/repodata/repomd.xml.asc
-./fedora/tree-2.2.1-4.fc44.x86_64.rpm
+./debian/forky/dists/forky/InRelease
+./debian/forky/dists/forky/Release
+./debian/forky/dists/forky/main/binary-all/Packages
+./debian/forky/dists/forky/main/binary-all/Packages.gz
+./debian/forky/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-6.deb
+./debian/forky/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev-common.deb
+./debian/forky/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev6.deb
+./debian/forky/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-doc.deb
+./debian/sid/dists/sid/InRelease
+./debian/sid/dists/sid/Release
+./debian/sid/dists/sid/main/binary-all/Packages
+./debian/sid/dists/sid/main/binary-all/Packages.gz
+./debian/sid/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-6.deb
+./debian/sid/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev-common.deb
+./debian/sid/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev6.deb
+./debian/sid/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-doc.deb
+./debian/trixie/dists/trixie/InRelease
+./debian/trixie/dists/trixie/Release
+./debian/trixie/dists/trixie/main/binary-all/Packages
+./debian/trixie/dists/trixie/main/binary-all/Packages.gz
+./debian/trixie/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-6.deb
+./debian/trixie/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev-common.deb
+./debian/trixie/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev6.deb
+./debian/trixie/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-doc.deb
+./fedora/44/QMdmm-0.0.2-Linux-6.rpm
+./fedora/44/QMdmm-0.0.2-Linux-dev-common.rpm
+./fedora/44/QMdmm-0.0.2-Linux-dev6.rpm
+./fedora/44/QMdmm-0.0.2-Linux-doc.rpm
+./fedora/44/repodata/2a8717cd7dcada2ef6f6687c1ff9c9cb8f924d2c59f168240be4412257b24450-primary.xml.zst
+./fedora/44/repodata/31c5d25f80045db5928a99899907343ca8dccc63ef3eeb668de1548ea0ed15ec-other.xml.zst
+./fedora/44/repodata/49e1e212f4840074d8febac39bd0bbf379a884a01da06e85bf47b286575c22d6-filelists.xml.zst
+./fedora/44/repodata/repomd.xml
+./fedora/44/repodata/repomd.xml.asc
+./fedora/45/QMdmm-0.0.2-Linux-6.rpm
+./fedora/45/QMdmm-0.0.2-Linux-dev-common.rpm
+./fedora/45/QMdmm-0.0.2-Linux-dev6.rpm
+./fedora/45/QMdmm-0.0.2-Linux-doc.rpm
+./fedora/45/repodata/327d9abf8c71d67cbff9a668b0a938435a13b747c69d1dddbb7ee667b2628fe5-primary.xml.zst
+./fedora/45/repodata/51ae0434d426f4c05dd8e7959124c22ea66c59e1748fe31b97af1d20959936b5-other.xml.zst
+./fedora/45/repodata/575a67c3086798aad191ad3cc4e97a3fd2e6dc0520abef4575249c05f82c76e6-filelists.xml.zst
+./fedora/45/repodata/repomd.xml
+./fedora/45/repodata/repomd.xml.asc
+./fedora/rawhide/QMdmm-0.0.2-Linux-6.rpm
+./fedora/rawhide/QMdmm-0.0.2-Linux-dev-common.rpm
+./fedora/rawhide/QMdmm-0.0.2-Linux-dev6.rpm
+./fedora/rawhide/QMdmm-0.0.2-Linux-doc.rpm
+./fedora/rawhide/repodata/0a0fdb11687e8c032524fe91b2d49623a390d08efb335fdce28684d542ded3f4-other.xml.zst
+./fedora/rawhide/repodata/64ceab18dc6ff246f6e7d71d8aa06923740928ba7313eabe260f91a245524985-primary.xml.zst
+./fedora/rawhide/repodata/c391b5d2dab0c20224575b2d9c011c6a7869ce7d7efe5adc3fada34ca36333d0-filelists.xml.zst
+./fedora/rawhide/repodata/repomd.xml
+./fedora/rawhide/repodata/repomd.xml.asc
 ./index.html
 ./keys/alma/qmdmm-packages.gpg
 ./keys/arch/qmdmm-packages.gpg
 ./keys/debian/qmdmm-packages.gpg
 ./keys/fedora/qmdmm-packages.gpg
 ./keys/fingerprints.txt
+./keys/manjaro/qmdmm-packages.gpg
 ./keys/qmdmm-root.gpg
 ./keys/rocky/qmdmm-packages.gpg
-./rocky/repodata/69a3730a283b85a4b3cff7d04bfde3b2b234f0607ebc17319d7a8d143a8e066e-primary.xml.zst
-./rocky/repodata/6b37cc67608a24beaa81e1191d218f2ffd6b1191dceb5c100bac2e66249d518d-other.xml.zst
-./rocky/repodata/9b07d97dc6ececed89aac0650b67bfb292647fe9fbaca48f629465be5f53f82b-filelists.xml.zst
-./rocky/repodata/repomd.xml
-./rocky/repodata/repomd.xml.asc
+./keys/ubuntu/qmdmm-packages.gpg
+./manjaro/rolling/lab.db
+./manjaro/rolling/lab.db.sig
+./manjaro/rolling/lab.db.tar.gz
+./manjaro/rolling/lab.db.tar.gz.sig
+./manjaro/rolling/lab.files
+./manjaro/rolling/lab.files.sig
+./manjaro/rolling/lab.files.tar.gz
+./manjaro/rolling/lab.files.tar.gz.sig
+./manjaro/rolling/qmdmm-6-0.0.1-1-x86_64.pkg.tar.zst
+./manjaro/rolling/qmdmm-6-0.0.1-1-x86_64.pkg.tar.zst.sig
+./rocky/10/QMdmm-0.0.2-Linux-6.rpm
+./rocky/10/QMdmm-0.0.2-Linux-dev-common.rpm
+./rocky/10/QMdmm-0.0.2-Linux-dev6.rpm
+./rocky/10/QMdmm-0.0.2-Linux-doc.rpm
+./rocky/10/repodata/5a0e0a04d89c2ffa1e62031d051cbe910502d9bdc68b83d756683221264e29d5-filelists.xml.zst
+./rocky/10/repodata/66f01d2acf3866277b7faebea594417d6ae805f55bd9b434a286a06711bde727-primary.xml.zst
+./rocky/10/repodata/e83762d1cfbd01dc7eee5bde317e496fb445e0a9b8f9ecfa67868f626a8a95a5-other.xml.zst
+./rocky/10/repodata/repomd.xml
+./rocky/10/repodata/repomd.xml.asc
+./ubuntu/resolute/dists/resolute/InRelease
+./ubuntu/resolute/dists/resolute/Release
+./ubuntu/resolute/dists/resolute/main/binary-all/Packages
+./ubuntu/resolute/dists/resolute/main/binary-all/Packages.gz
+./ubuntu/resolute/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-6.deb
+./ubuntu/resolute/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev-common.deb
+./ubuntu/resolute/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev6.deb
+./ubuntu/resolute/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-doc.deb
+./ubuntu/stonking/dists/stonking/InRelease
+./ubuntu/stonking/dists/stonking/Release
+./ubuntu/stonking/dists/stonking/main/binary-all/Packages
+./ubuntu/stonking/dists/stonking/main/binary-all/Packages.gz
+./ubuntu/stonking/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-6.deb
+./ubuntu/stonking/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev-common.deb
+./ubuntu/stonking/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev6.deb
+./ubuntu/stonking/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-doc.deb
 </pre>

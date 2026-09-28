@@ -1,0 +1,24 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: QMdmm Signing Lab
+Label: QMdmm Signing Lab
+Suite: forky
+Codename: forky
+Date: Mon, 28 Sep 2026 00:32:39 UTC
+Architectures: all
+Components: main
+Description: QMdmm debian forky repository
+MD5Sum:
+ 424e742d1045580af8f45c9b4cd2c2d0             1940 main/binary-all/Packages
+ 927b24a3445945e889ad2b32a7104a34              726 main/binary-all/Packages.gz
+SHA256:
+ 6e087717577453bd7cfd916e4e6a75294989c2247179a950938db629a7b5e08f             1940 main/binary-all/Packages
+ 0c7f54f36caefa207aa26fa85ee3444d8e6ed18f3ce98b72814733a088b55a4c              726 main/binary-all/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iHUEARYKAB0WIQRSptqSUI9IfqDsbfU/RiLMlc2/tAUCarm1pwAKCRA/RiLMlc2/
+tIJbAQC9FkDnCrBlc7TWooX1L3kk9lcL4A5XyhW1CZ1yIMbBRwD+N3whZ8RUNnR9
+ZdIJ9+pTNj2n0LxLY6zXmKWxlQdYBAg=
+=I7gK
+-----END PGP SIGNATURE-----
