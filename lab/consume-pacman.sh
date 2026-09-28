@@ -50,8 +50,7 @@ echo "--- tooling ---"
 # Asking for `archlinux-keyring` by name would fail on the Manjaro row (that
 # package does not exist there), and pacman installs all-or-nothing, so the
 # failure would have taken gnupg and curl down with it.
-pacman -Sy --noconfirm --needed gnupg curl ca-certificates >/dev/null 2>&1 \
-  || pacman -S --noconfirm --needed gnupg curl ca-certificates-mozilla >/dev/null 2>&1 || true
+pacman_tools
 command -v gpg  >/dev/null || { echo "  !! gpg is missing"; exit 1; }
 command -v curl >/dev/null || { echo "  !! curl is missing"; exit 1; }
 assert_tls "$PAGES/publish.json" || exit 1

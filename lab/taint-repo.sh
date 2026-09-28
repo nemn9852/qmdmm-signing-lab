@@ -40,10 +40,12 @@ echo "--- tooling ---"
 case "$FMT" in
   deb) export DEBIAN_FRONTEND=noninteractive
        apt-get update -qq </dev/null
-       apt-get install -y -qq --no-install-recommends gnupg curl gzip ca-certificates </dev/null ;;
+       # gpgv is its own Debian package and gnupg does not pull it in, and this
+       # branch is written against gpgv. (Stage B's keyring cell learned this
+       # first; this file did not.)
+       apt-get install -y -qq --no-install-recommends gnupg gpgv curl gzip ca-certificates </dev/null ;;
   rpm) dnf install -y -q gnupg2 curl ca-certificates </dev/null >/dev/null 2>&1 || true ;;
-  pac) pacman -Sy --noconfirm --needed gnupg curl ca-certificates >/dev/null 2>&1 \
-         || pacman -S --noconfirm --needed gnupg curl ca-certificates-mozilla >/dev/null 2>&1 || true ;;
+  pac) pacman_tools ;;
 esac
 # Every fetch below is https, so a missing CA bundle would present itself as
 # "the site never served ..." several minutes later.

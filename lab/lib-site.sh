@@ -126,6 +126,39 @@ assert_tls() {  # assert_tls <url>
   echo "  curl reaches the site over TLS: yes"
 }
 
+# Install the tools a pacman-based row needs - and only the ones that are
+# missing.
+#
+# On a rolling release, re-installing something already present can drag in a
+# partial upgrade. Manjaro's base image carries a working curl; asking for it
+# again pulled a libcurl built against a newer ngtcp2 than the image had, after
+# which every https request died with
+#
+#   curl: symbol lookup error: /usr/lib/libcurl.so.4: undefined symbol:
+#   ngtcp2_conn_get_tls_early_data_rejected2
+#
+# which names a library and presents itself as "the deploy never arrived".
+# A rolling release is upgraded whole or not at all, so the safe move is not to
+# touch what is there.
+pacman_tools() {
+  local p
+  for p in gnupg curl ca-certificates; do
+    if pacman -Q "$p" >/dev/null 2>&1; then
+      echo "  $p already present"
+      continue
+    fi
+    echo "  installing $p"
+    if [ "$p" = curl ]; then
+      # curl arrives with a library stack behind it. If it really is missing,
+      # bring the system along rather than installing into a partial one.
+      pacman -Syu --noconfirm --needed curl >/dev/null 2>&1 || true
+    else
+      pacman -Sy --noconfirm --needed "$p" >/dev/null 2>&1 \
+        || pacman -Sy --noconfirm --needed ca-certificates-mozilla >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 # fetch <url> <dest> - public material only, and it says so in the log, because
 # "the consumer got its keys from Pages" is a claim this lab has to be able to
 # point at.
