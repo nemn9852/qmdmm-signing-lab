@@ -5,20 +5,20 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: resolute
 Codename: resolute
-Date: Mon, 28 Sep 2026 05:20:18 UTC
+Date: Mon, 28 Sep 2026 05:29:14 UTC
 Architectures: all
 Components: main
 Description: QMdmm ubuntu resolute repository
 MD5Sum:
- 8cafc3e5bdf59e883ad0dcaabd366720             1940 main/binary-all/Packages
- 363568730128b7bd896d3cf8573e549f              721 main/binary-all/Packages.gz
+ d2cf50cea057f0fb3e04e370390339c7             1940 main/binary-all/Packages
+ 2a44e214e1414b6d77f7d3923bf911ba              724 main/binary-all/Packages.gz
 SHA256:
- 7e828c65d202a9bd71bfe4dda1204b4f0e45040536825317b7640f893c9a6c11             1940 main/binary-all/Packages
- 5b6d25f361e6e8c3c1c0a1dff516fc23b8df8dfd244635059f60f6dc5e531a76              721 main/binary-all/Packages.gz
+ 2860ce245cb1ed7aed49a0936877edc913851697b97f96cdd4666d3fabc753e3             1940 main/binary-all/Packages
+ 259756b5f384bef2be28c6184015ee7c73da244f6da77b539b58a557bd90b7c4              724 main/binary-all/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQS3c6X5B0wUyreNVTJq0O13Cl+APwUCarn5EgAKCRBq0O13Cl+A
-P+jYAP4ucrElMbm1QxZZo92ciPSq+DeWAiJe9mylHEry/ufZTQD+LrlKfqU2nR4i
-zHHaYRJuu6laXKffucO4WF3Kpioj5gk=
-=aiWW
+iHUEARYKAB0WIQS3c6X5B0wUyreNVTJq0O13Cl+APwUCarn7KgAKCRBq0O13Cl+A
+P9P5AQC2YsTuGIy6D2TbM8Y4ZEqUXzzqiE4IVwcuFruxBqXb+AD+LeUl10NzMEvn
+9MqeaBfvr8gghVQEAVRxryxr3NDXJg8=
+=TF/N
 -----END PGP SIGNATURE-----

@@ -5,20 +5,20 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: forky
 Codename: forky
-Date: Mon, 28 Sep 2026 05:20:07 UTC
+Date: Mon, 28 Sep 2026 05:29:10 UTC
 Architectures: all
 Components: main
 Description: QMdmm debian forky repository
 MD5Sum:
- 7d4dd128249632e44f3d70add3d2c37c             1940 main/binary-all/Packages
- c51e7daa3d949739a8ca930505e801b8              721 main/binary-all/Packages.gz
+ cad888655f2046dc5b74e5ca646540ab             1940 main/binary-all/Packages
+ f44ad5df784588914fc4036b8cdd3aa8              725 main/binary-all/Packages.gz
 SHA256:
- 572f964f02e9ea7177dbff60b99c529b58872873d4b77c518415108c44ab5f18             1940 main/binary-all/Packages
- 928fe8d4025a8221311d9c92f4b5a600409579d1f6a4c691ba59cdc3f81bf3a7              721 main/binary-all/Packages.gz
+ 17bc425d4d5dea1152a2889527d429bd04f3ad7896a68fe166015572b08497a5             1940 main/binary-all/Packages
+ c7b6e02128eb21b17fb5a21b46ea30f3fedbbc0897511725e46eea29d8eea3c3              725 main/binary-all/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQRSptqSUI9IfqDsbfU/RiLMlc2/tAUCarn5BwAKCRA/RiLMlc2/
-tFQGAQDOyHewzh4C2BtpVEc/sdTmfvSdMsY1UuZp6u89Z9OUTQD/Ss4Ej4u09UMi
-Die0Gm7L0LJhgIyLN6OGrnjvXIJGxQU=
-=Xtj9
+iHUEARYKAB0WIQRSptqSUI9IfqDsbfU/RiLMlc2/tAUCarn7JgAKCRA/RiLMlc2/
+tIZ6AQDrNFCL7rg9ZKy9DfLcPbAm0Mgi0JH0Ql5tMU2H3HHzLgEAswWuIBJ4DtGu
+UXiG6JWl5wcewoXceSW6xDa04UlEHwY=
+=0/2c
 -----END PGP SIGNATURE-----
