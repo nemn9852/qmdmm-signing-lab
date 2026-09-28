@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
 #
-# Stage B for the rpm format: does dnf refuse metadata signed by a key that has
+# Stage B for the rpm format: DOES dnf refuse metadata signed by a key that has
 # since been revoked?
 #
-# FINDINGS 3.1 recorded that revocation is only as good as the verifier, and 10.7
-# recorded that this lab had demonstrated it against `gpgv` (apt's backend) and
-# measured nothing for dnf or pacman. This cell measures dnf.
+# Answer: **no**. FINDINGS 10.8 is the measurement; this script is how it was
+# made. FINDINGS 3.1 recorded that revocation is only as good as the verifier,
+# and 10.7 recorded that this lab had demonstrated it against `gpgv` (apt's
+# backend) and measured nothing for dnf or pacman. This cell measures dnf, and
+# the answer is that the revocation certificate is not consulted on this path.
 #
 # The design is the same-object control that 3.7 asks for, taken to its tightest
 # form here: ONE artifact, ONE repository configuration, and the only thing that
 # differs between the two halves is which public state of the signing key the
 # consumer was given.
 #
-#   A. gpgkey = the key as it looked BEFORE the revocation -> must be accepted
-#   B. gpgkey = the same key WITH the revocation certificate -> must be refused
+#   A. gpgkey = the key as it looked BEFORE the revocation -> accepted
+#   B. gpgkey = the same key WITH the revocation certificate -> ACCEPTED TOO
 #
-# If B were run without A, a refusal could be caused by anything - a bad URL, a
-# missing file - and would still look like revocation working. A is what makes
-# B mean something.
+# Because B is not refused, A is what proves the fixture can be told apart at all
+# - if A had been refused too, nothing below would mean anything. The cell
+# asserts the observed behaviour rather than the hoped-for one, so that it goes
+# red the day dnf starts checking.
 #
 #   env: PAGES, EXPECT_SHA
 set -euo pipefail
@@ -76,37 +79,47 @@ rm -rf /var/cache/dnf /var/cache/libdnf5; dnf clean all >/dev/null 2>&1 || true
 dnf -y -q makecache > "$W/a.log" 2>&1 || true
 echo "  --- what dnf said ---"
 sed 's/^/    /' "$W/a.log"
-# The mirror of the assertion in the second half: no signature complaint here.
-# That is the entire difference between the two halves - one artifact, one
-# configuration, one key file apart.
+# The control. Because the second half turns out to be accepted as well (see the
+# finding there), this half is what establishes that "accepted" is a real
+# observation and not a fixture that nothing could ever reject: same artifact,
+# same configuration, one key file apart.
 if grep -qiE 'signature verification error|GPG check FAILED|Bad PGP signature|Signing key not found' "$W/a.log"; then
-  echo "  !! the control was refused, so the second half would mean nothing"
+  echo "  !! the control was refused, so nothing below would mean anything"
   exit 1
 fi
 echo "  OK: accepted (an empty repository, as designed - the metadata verified)"
 
 echo
-echo "--- B) the SAME key, with its revocation certificate, must refuse it ---"
+echo "--- B) the SAME key, with its revocation certificate ---"
 write_repo "$W/keys/after.gpg"
 rm -rf /var/cache/dnf /var/cache/libdnf5; dnf clean all >/dev/null 2>&1 || true
 dnf -y -q makecache > "$W/b.log" 2>&1 || true
 echo "  --- what dnf said ---"
 sed 's/^/    /' "$W/b.log"
-# Two assertions, because either one alone can be satisfied for the wrong reason.
-# "dnf lists no package" is true of an EMPTY repository whether or not the
-# signature was accepted - and this fixture is empty on purpose, so that check on
-# its own would pass with revocation doing nothing at all. The refusal has to be
-# visible in what dnf says about the signature; only then does the second
-# assertion mean what it looks like it means.
-if ! grep -qiE 'signature verification error|GPG check FAILED|Bad PGP signature|Signing key not found' "$W/b.log"; then
-  echo "  !! dnf reported no signature problem - so any refusal here has another cause"
+
+# The finding, and it is the opposite of what this cell was written expecting:
+# dnf ACCEPTS metadata signed by a key that has since been revoked. Its output
+# here is what the control produced, line for line - same import, same
+# "Metadata cache created." - so the revocation certificate is not consulted on
+# this path. That dnf verifies signatures at all is not in doubt: stage B's
+# twelve rows show it refusing a repository whose gpgkey= names only the root
+# key, with "repomd.xml GPG signature verification error".
+#
+# The assertion is therefore inverted on purpose, the way fedora:43 was handled:
+# the day dnf starts checking revocation, this goes red and whoever reads it
+# learns that FINDINGS 10.8 needs revisiting. A cell asserting "dnf refuses it"
+# would have been red forever, and would have been read as a broken fixture.
+if ! grep -q 'Metadata cache created' "$W/b.log"; then
+  echo "  !! dnf did NOT accept the revoked-key metadata - it now checks revocation,"
+  echo "     so FINDINGS 10.8 is out of date and this cell should be flipped back"
   exit 1
 fi
-mapfile -t seen < <(dnf_packages "$REPO" "$W" || true)
-if [ "${#seen[@]}" -ge 1 ]; then
-  echo "  !! dnf accepted metadata signed by a revoked key: ${seen[*]}"; exit 1
+if grep -qiE 'signature verification error|Bad PGP signature|Signing key not found' "$W/b.log"; then
+  echo "  !! dnf complained about the signature after all - contradicts the note above"
+  exit 1
 fi
-echo "  OK: refused, and it said why"
+echo "  OK: dnf accepted it, exactly as it accepted the control"
+echo "      -> revocation is NOT enforced by this consumer (FINDINGS 10.8)"
 
 echo
 echo "=== B/revoked (rpm, dnf): PASS ==="

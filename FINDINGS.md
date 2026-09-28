@@ -633,19 +633,67 @@ Checked rather than assumed, because a job that skips its work is also green:
   The human-readable line says **Good signature**. The status stream says
   `REVKEYSIG`. An assertion built on the first would have passed.
 
-### 10.7 What this lab does **not** cover
+## 10.8 Revocation, measured: three verifiers, three answers
+
+3.1 said revocation is only as good as the verifier, having noticed that `gpg
+--verify` and `sqv` disagree. That was one pair. The same question has now been
+put to the three package managers, one artifact per format, with the signing key's
+two public states committed (`keys/revoked-fixture-before.gpg`, 602 bytes, and
+`keys/revoked-fixture.gpg`, 724 bytes - the difference is the revocation
+certificate). The only thing that differs between the two readings is which state
+the consumer was handed:
+
+| verifier | format | metadata signed by a revoked key |
+|---|---|---|
+| `gpgv` (what apt verifies with) | deb | **refused** - `REVKEYSIG` in the status stream (§10.2) |
+| `dnf` 5.4.3.0 on fedora:44 | rpm | **ACCEPTED** |
+| `pacman` on archlinux:base | pac | **refused** - `signature from … is invalid`, `invalid or corrupted database (PGP signature)` |
+
+**What this means for a release.** Revoking a signing key is the standard answer
+to a key being compromised. On the rpm line it does not do what it is expected to
+do: dnf imports the key, never consults the revocation certificate, and accepts
+the repository - its output on the revoked key is character-for-character what it
+produces on the valid one. So the stop-gap for an rpm line has to be "rotate the
+key and move consumers to it", not "revoke and let consumers notice". apt and
+pacman do refuse, so for those two the ordinary story holds.
+
+That dnf verifies signatures at all is not in doubt, and this lab shows it: the
+twelve rpm consumer rows refuse a repository whose `gpgkey=` names only the root
+key, with `repomd.xml GPG signature verification error`. It checks signatures; it
+does not check revocation.
+
+`pacman-key --lsign-key` deserves its own line: it **accepted** locally signing
+the revoked key, without complaint. The refusal comes later, at the database. So
+for pacman too, the trust-granting step is not where revocation is noticed.
+
+### 10.8.1 The rpm half was green for the wrong reason first
+
+Recorded because it is §3.12's family and would otherwise have been invisible.
+
+The first version of the dnf cell asserted "dnf can no longer list a package from
+this repository". The rpm fixture is an **empty** repository - deliberately, so
+that "the metadata verified" stays separable from "packages install" - and that
+assertion is true of an empty repository whether or not the signature was ever
+accepted. Revocation could have been doing nothing at all and the cell would have
+been green, which is what happened: it passed on the same run as the working
+pacman cell, and read as confirmation. Asking the narrower question - did dnf say
+anything about the signature - turned it red on the next run and produced the
+table above. An empty fixture needs an assertion about the *mechanism*, because
+the packages are absent by construction.
+
+### 10.9 What this lab still does **not** cover
 
 Written down because an unverified thing that is not labelled as unverified tends
 to be read as a verified one.
 
-- **Revocation is only exercised on the debian line, and only against `gpgv`.**
-  There is one revoked fixture (`site/debian-revoked`), produced by the one
-  rotation script that exists (`rotate-debian-local.sh`, whose `case` accepts
-  `debian` and nothing else), and it is verified by the one cell that reads it
-  (`consume-apt-keyring.sh`). So §3.1's finding - that revocation is only as good
-  as the verifier - is *demonstrated* for `gpgv` (apt's backend) and **unknown for
-  `dnf` and `pacman`**. Whether dnf refuses a `repomd.xml` signed by a revoked
-  subkey, or pacman a database, has not been measured here at all.
+- **Rotating a line's subkey has only ever been done on debian.** §10.8 measures
+  what revocation *does* on all three formats, but with a separate fixture key
+  rather than a rotated line key. The operation itself -
+  `rotate-debian-local.sh`, whose `case` accepts `debian` and nothing else - has
+  never been run against the other six lines, and their
+  `keys/<line>/qmdmm-packages.gpg` files carry no revoked subkey as a result. So
+  "rotate fedora's subkey" is a process nobody has walked through, whatever the
+  consumer-side behaviour turns out to be.
 
 - **The other lines' key files carry no revoked subkey.** Only
   `keys/debian/qmdmm-packages.gpg` does, because that is what the rotation script
@@ -653,12 +701,6 @@ to be read as a verified one.
   Every other line ships root plus one live subkey, so if one of them were
   revoked a consumer would report an unknown key - a worse diagnosis, and a
   different code path from the one tested.
-
-- **The keyring *package* is never consumed.** `mkkeyring-deb.sh` builds
-  `qmdmm-archive-keyring`, which is the thing an actual user installs to get both
-  sources configured, and nothing in CI installs it. What gets verified is the
-  keyring *source* being signed by the root key alone; "install this package and
-  both repositories are configured and trusted" is a claim with no witness.
 
 - **Only the deb format has a keyring/trust-artefact mechanism built at all.**
   The rpm `*-release` package and the pacman keyring package that
