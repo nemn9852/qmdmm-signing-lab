@@ -32,7 +32,13 @@ PAGES="${PAGES:?}"; LINE="${LINE:?}"; VERSION="${VERSION:?}"
 ROOT_FPR="${ROOT_FPR:?}"; EXPECT_SHA="${EXPECT_SHA:?}"
 PKGS="${PKGS:-}"
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
-mkdir -p "$W/keys" "$W/none" /etc/apt/sources.list.d
+# The keyring directory is /etc/apt/keyrings and not the scratch directory, and
+# every file in it is world-readable. apt verifies signatures in a sub-process
+# that drops to the `_apt` user, which cannot read into a 0700 mktemp directory:
+# the symptom is "Failed to parse keyring ... Permission denied", which reads
+# like a corrupt key and is not.
+KEYDIR=/etc/apt/keyrings
+mkdir -p "$KEYDIR" "$W/none" /etc/apt/sources.list.d
 source "$(dirname "$0")/lib-site.sh"
 
 echo "=== B/apt $LINE $VERSION ==="
@@ -52,17 +58,20 @@ wait_for_publish "$PAGES" "$EXPECT_SHA"
 
 echo
 echo "--- take the public keys from Pages (the only channel a consumer has) ---"
-fetch "$PAGES/keys/qmdmm-root.gpg"          "$W/keys/root.gpg"
-fetch "$PAGES/keys/$LINE/qmdmm-packages.gpg" "$W/keys/packages.gpg"
+fetch "$PAGES/keys/qmdmm-root.gpg"          "$KEYDIR/root.gpg"
+fetch "$PAGES/keys/$LINE/qmdmm-packages.gpg" "$KEYDIR/packages.gpg"
+chmod 644 "$KEYDIR"/root.gpg "$KEYDIR"/packages.gpg
+echo "  readable by the user apt verifies as:"
+ls -l "$KEYDIR"/root.gpg "$KEYDIR"/packages.gpg | awk '{printf "    %s %s %s\n", $1, $3, $9}'
 
 echo
 echo "--- the keys really are what the design says they are ---"
-rootfpr=$(key_fpr "$W/keys/root.gpg")
-nsub=$(count_subkeys "$W/keys/root.gpg")
+rootfpr=$(key_fpr "$KEYDIR/root.gpg")
+nsub=$(count_subkeys "$KEYDIR/root.gpg")
 echo "  root key file:   $rootfpr   subkeys: $nsub"
 [ "$rootfpr" = "$ROOT_FPR" ] || { echo "  !! root fingerprint is not $ROOT_FPR"; exit 1; }
 [ "$nsub" = 0 ] || { echo "  !! the root key file carries subkeys; it must carry none"; exit 1; }
-sub=$(first_sub_fpr "$W/keys/packages.gpg")
+sub=$(first_sub_fpr "$KEYDIR/packages.gpg")
 echo "  packages key:    $sub   (this line's operational subkey)"
 [ -n "$sub" ] || { echo "  !! the packages key file carries no subkey"; exit 1; }
 [ "$sub" != "$rootfpr" ] || { echo "  !! the packages key file's subkey IS the root key"; exit 1; }
@@ -74,7 +83,7 @@ echo "--- A) the day-to-day source, signed by this line's subkey ---"
 # *configured* sources, so a source that only ever existed inside the `update`
 # invocation would be invisible at the moment the package is actually asked for.
 src=/etc/apt/sources.list.d/qmdmm.list
-echo "deb [signed-by=$W/keys/packages.gpg] $PAGES/$LINE/$VERSION $VERSION main" > "$src"
+echo "deb [signed-by=$KEYDIR/packages.gpg] $PAGES/$LINE/$VERSION $VERSION main" > "$src"
 cat "$src" | sed 's/^/  | /'
 if ! apt-get update > "$W/update.log" 2>&1; then
   echo "  !! apt-get update refused the source:"; sed 's/^/    /' "$W/update.log"; exit 1
@@ -103,7 +112,7 @@ echo
 echo "--- B) the same source with the ROOT key only -> must be refused ---"
 # The same file, the same suite, the same repository - only the key file
 # changes, so the refusal cannot come from anything else.
-echo "deb [signed-by=$W/keys/root.gpg] $PAGES/$LINE/$VERSION $VERSION main" > "$src"
+echo "deb [signed-by=$KEYDIR/root.gpg] $PAGES/$LINE/$VERSION $VERSION main" > "$src"
 cat "$src" | sed 's/^/  | /'
 if apt-get update -o Dir::Etc::sourcelist="$src" -o Dir::Etc::sourceparts="$W/none" \
        > "$W/neg.log" 2>&1; then

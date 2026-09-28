@@ -53,13 +53,19 @@ echo "--- tooling ---"
 pacman -Sy --noconfirm --needed gnupg curl >/dev/null 2>&1 || true
 command -v gpg  >/dev/null || { echo "  !! gpg is missing"; exit 1; }
 command -v curl >/dev/null || { echo "  !! curl is missing"; exit 1; }
-# pacman-key needs gpg, so the keyring can only be initialised once the tools
-# above are actually present.
-if [ ! -s /etc/pacman.d/gnupg/trustdb.gpg ]; then
-  echo "  (initialising the pacman keyring)"
+# `pacman-key --lsign-key` has to SIGN with the local keyring's master key, so
+# the question is not "is there a keyring" - Arch's base image ships one, filled
+# with the distribution's public keys and with no secret key at all. Without
+# this, --lsign-key dies with "There is no secret key available to sign with",
+# which is a message about the keyring and looks nothing like the actual
+# problem: a container that has never needed to sign anything.
+if ! gpg --homedir /etc/pacman.d/gnupg --list-secret-keys 2>/dev/null | grep -q '^sec'; then
+  echo "  (the pacman keyring has no secret key; creating one)"
   pacman-key --init
-  pacman-key --populate archlinux >/dev/null 2>&1 || true
+  gpg --homedir /etc/pacman.d/gnupg --list-secret-keys 2>/dev/null | grep -q '^sec' \
+    || { echo "  !! pacman-key --init did not produce a key this keyring can sign with"; exit 1; }
 fi
+echo "  pacman keyring can sign: yes"
 echo "  gpg:   $(command -v gpg)"
 echo "  curl:  $(command -v curl)"
 echo

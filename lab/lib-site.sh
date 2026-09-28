@@ -13,10 +13,14 @@
 
 wait_for_publish() {
   local pages="$1" expect="$2" got="" raw="" i
-  for i in $(seq 1 60); do
-    # curl exits 22 on an HTTP error; under `set -e` that would kill the
-    # script, so swallow it and treat "no answer" as "not yet".
-    raw=$(curl -fsSL --max-time 15 "$pages/publish.json" 2>/dev/null || true)
+  for i in $(seq 1 90); do
+    # The cache-buster is not decoration. Pages is served through a CDN, and a
+    # plain repeated request can keep answering with the previous deploy long
+    # after the branch has moved - two cells of one run waited fifteen minutes
+    # for a publish that other cells in the same run were already reading.
+    # curl exits 22 on an HTTP error; under `set -e` that would kill the script,
+    # so swallow it and treat "no answer" as "not yet".
+    raw=$(curl -fsSL --max-time 15 "$pages/publish.json?cb=${RANDOM}${RANDOM}" 2>/dev/null || true)
     got=$(printf '%s' "$raw" | tr -d ' \n' | sed -n 's/.*"sha":"\([0-9a-f]*\)".*/\1/p')
     if [ "$got" = "$expect" ]; then
       echo "  site is live at ${got:0:7} (waited ${i} poll(s))"
@@ -27,6 +31,41 @@ wait_for_publish() {
   done
   echo "  !! the site never served publish ${expect:0:7}"
   return 1
+}
+
+# List the package names a repository serves, across dnf4 and dnf5.
+#
+# Three shapes, tried in order, because the option that selects the output
+# format was renamed between the two dnf generations - and a rejected option can
+# still leave dnf printing its default NEVRA, which is not the same answer:
+#
+#   1. `repoquery --qf`           dnf4 spelling
+#   2. `repoquery --queryformat`  dnf5 spelling
+#   3. `list --available`         both, and its output shape has not moved
+#
+# Nothing here swallows the reason. If all three come back empty, each one's
+# stderr is printed, because "this repository serves no package" and "the
+# command never ran properly" look identical from the outside and only one of
+# them is a finding. `-y` is on every call: dnf4 asks whether to import the
+# repository's key, and with no stdin that answer becomes "no".
+dnf_packages() {  # dnf_packages <repo-id> <workdir>
+  local repo="$1" w="$2" out="" f
+  out=$(dnf -y -q repoquery --repo="$repo" --qf '%{name}' 2>"$w/q1.err") || true
+  if [ -z "$out" ]; then
+    out=$(dnf -y -q repoquery --repo="$repo" --queryformat '%{name}' 2>"$w/q2.err") || true
+  fi
+  if [ -z "$out" ]; then
+    out=$(dnf -y -q list --available --repo="$repo" 2>"$w/q3.err" \
+          | awk 'NF>=3 {print $1}' | sed 's/\.[^.]*$//' | grep -v '^$' | sort -u) || true
+  fi
+  if [ -z "$out" ]; then
+    echo "  --- none of the three ways of listing this repository returned anything ---"
+    for f in "$w"/q1.err "$w"/q2.err "$w"/q3.err; do
+      if [ -s "$f" ]; then echo "    $(basename "$f"):"; sed 's/^/      /' "$f"; fi
+    done
+    return 1
+  fi
+  printf '%s\n' "$out"
 }
 
 # The distribution's own name, for the log line.

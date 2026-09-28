@@ -39,15 +39,8 @@ source "$(dirname "$0")/lib-site.sh"
 REPO=qmdmm-lab
 REPOFILE=/etc/yum.repos.d/qmdmm.repo
 
-# dnf4 takes --qf, dnf5 takes --queryformat; whichever this distro has answers.
-dnf_packages() {
-  local fmt out
-  for fmt in --qf --queryformat; do
-    out=$(dnf -q repoquery --repo="$REPO" "$fmt" '%{name}' 2>/dev/null | sort -u) || true
-    if [ -n "$out" ]; then printf '%s\n' "$out"; return 0; fi
-  done
-  return 1
-}
+# Listing a repository's packages lives in lib-site.sh: stage C needs the same
+# answer, and the answer turned out to be three fallbacks rather than one guess.
 
 write_repo() {  # write_repo <key-file>
   cat > "$REPOFILE" <<EOF
@@ -96,13 +89,13 @@ echo "  OK: root and operational keys are different keys"
 echo
 echo "--- A) the day-to-day source, signed by this line's subkey ---"
 write_repo "$W/keys/packages.gpg"
-dnf -q makecache > "$W/update.log" 2>&1 || true
+dnf -y -q makecache > "$W/update.log" 2>&1 || true
 if grep -qiE 'signature verification error|GPG check FAILED' "$W/update.log"; then
   echo "  !! metadata signature was refused:"; sed 's/^/    /' "$W/update.log"; exit 1
 fi
 grep -iE "qmdmm|$REPO" "$W/update.log" | sed 's/^/    /' || true
 
-mapfile -t found < <(dnf_packages || true)
+mapfile -t found < <(dnf_packages "$REPO" "$W" || true)
 echo "  packages the repository serves: ${found[*]:-<none>}"
 [ "${#found[@]}" -ge 1 ] || { echo "  !! the source served no qmdmm package at all"; exit 1; }
 if [ -n "$PKGS" ]; then
@@ -137,9 +130,9 @@ echo "--- B) the same source with the ROOT key only -> must be refused ---"
 write_repo "$W/keys/root.gpg"
 rm -rf /var/cache/dnf /var/cache/libdnf5
 dnf clean all >/dev/null 2>&1 || true
-dnf -q makecache > "$W/neg.log" 2>&1 || true
+dnf -y -q makecache > "$W/neg.log" 2>&1 || true
 grep -iE 'signature verification error|GPG check FAILED' "$W/neg.log" | head -3 | sed 's/^/    /' || true
-mapfile -t negfound < <(dnf_packages || true)
+mapfile -t negfound < <(dnf_packages "$REPO" "$W" || true)
 if [ "${#negfound[@]}" -ge 1 ]; then
   echo "  !! dnf still lists ${#negfound[@]} package(s) with only the root key: ${negfound[*]}"
   exit 1

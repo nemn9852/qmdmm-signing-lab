@@ -53,6 +53,10 @@ echo
 echo "--- keys, from Pages only ---"
 fetch "$PAGES/keys/qmdmm-root.gpg"          "$W/keys/root.gpg"
 fetch "$PAGES/keys/$LINE/qmdmm-packages.gpg" "$W/keys/packages.gpg"
+# apt verifies signatures as the `_apt` user, which cannot read into mktemp's
+# 0700 directory - stage B hit exactly this. Here the copy is made reachable
+# rather than moved, because the file:// source names it by path.
+chmod 755 "$W"; chmod 644 "$W"/keys/*
 sub=$(first_sub_fpr "$W/keys/packages.gpg")
 echo "  this line's subkey: $sub"
 [ -n "$sub" ] || { echo "  !! no subkey in the packages key file"; exit 1; }
@@ -120,14 +124,14 @@ repo_gpgcheck=1
 gpgkey=file://$W/keys/packages.gpg
 EOF
     rm -rf /var/cache/dnf /var/cache/libdnf5; dnf clean all >/dev/null 2>&1 || true
-    dnf -q makecache > "$W/control.log" 2>&1 || true
+    dnf -y -q makecache > "$W/control.log" 2>&1 || true
     if grep -qiE 'signature verification error|GPG check FAILED' "$W/control.log"; then
       echo "  !! the control refresh failed, so nothing below would mean anything:"
       sed 's/^/    /' "$W/control.log"; exit 1
     fi
-    n=$(dnf -q repoquery --repo=qmdmm-lab --qf '%{name}' 2>/dev/null | sort -u | wc -l | tr -d ' ')
-    [ "$n" -ge 1 ] || n=$(dnf -q repoquery --repo=qmdmm-lab --queryformat '%{name}' 2>/dev/null | sort -u | wc -l | tr -d ' ')
-    [ "$n" -ge 1 ] || { echo "  !! the control copy lists no package at all"; exit 1; }
+    ctl=$(dnf_packages qmdmm-lab "$W" || true)
+    [ -n "$ctl" ] || { echo "  !! the control copy lists no package at all"; exit 1; }
+    echo "  control lists: $(printf '%s' "$ctl" | tr '\n' ' ')"
     ;;
   pac)
     pacman-key --add "$W/keys/packages.gpg" 2>&1 | sed 's/^/    /'
@@ -182,12 +186,13 @@ case "$FMT" in
     ;;
   rpm)
     rm -rf /var/cache/dnf /var/cache/libdnf5; dnf clean all >/dev/null 2>&1 || true
-    dnf -q makecache > "$W/taint.log" 2>&1 || true
+    dnf -y -q makecache > "$W/taint.log" 2>&1 || true
     # dnf makecache exits 0 on a failed check (FINDINGS.md 3.2), so the assertion
     # is that the repository can no longer be listed - not that the command failed.
-    neg=$(dnf -q repoquery --repo=qmdmm-lab --qf '%{name}' 2>/dev/null | sort -u | wc -l | tr -d ' ')
-    if [ "$neg" -ge 1 ]; then
-      echo "  !! dnf still lists $neg package(s) from the tampered repository"; exit 1
+    neg=$(dnf_packages qmdmm-lab "$W" || true)
+    if [ -n "$neg" ]; then
+      echo "  !! dnf still lists $(printf '%s' "$neg" | tr '\n' ' ') from the tampered repository"
+      exit 1
     fi
     grep -iE 'signature verification error|GPG check FAILED' "$W/taint.log" | head -4 | sed 's/^/    /' || true
     ;;
