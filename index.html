@@ -76,6 +76,29 @@ keyring source being verifiable by the root key ALONE. So:
 
 Every consumer in this lab takes its keys from &lt;pages>/keys/, which is what a
 consumer of a published repository does: there is no other channel.
+
+The revoked fixture key
+-----------------------
+One key exists only to make revocation measurable, which is why there are two
+public files here for it and one for everything else:
+
+  keys/revoked-fixture-before.gpg   the key as it looked BEFORE it was revoked
+  keys/revoked-fixture.gpg          the same key, with the revocation certificate
+
+  fingerprint  0B1F 7C5A A6FE 619F D3E7  9A73 E851 6372 7018 1DB8
+  keyid        E851637270181DB8
+  status       revoked by the root key
+
+Repositories signed by it are published at &lt;pages>/revoked-rpm and
+&lt;pages>/revoked-pac. Stage B reads the SAME artifact twice: accepted under the
+"before" file, refused under the "after" one. That pair is the whole point -
+FINDINGS 3.1 says revocation is only as good as the verifier, and this is how the
+lab measures dnf and pacman rather than assuming they behave like gpgv.
+
+The private half is not here and does not enter the repository. It lives in the
+`fixture` environment, because the signature has to be made BEFORE the revocation
+(gpg will not sign with a revoked key), which is also why the fixture repository
+is built at run time instead of being committed.
 </pre><h2>Repository roots</h2><ul>
 <li><a href="alma/10/">alma/10/</a></li>
 <li><a href="arch/rolling/">arch/rolling/</a></li>
@@ -96,19 +119,22 @@ consumer of a published repository does: there is no other channel.
 <li><a href="keys/rocky/">keys/rocky/</a></li>
 <li><a href="keys/ubuntu/">keys/ubuntu/</a></li>
 <li><a href="manjaro/rolling/">manjaro/rolling/</a></li>
+<li><a href="revoked-rpm/repodata/">revoked-rpm/repodata/</a></li>
 <li><a href="rocky/10/">rocky/10/</a></li>
 <li><a href="ubuntu/resolute/">ubuntu/resolute/</a></li>
 <li><a href="ubuntu/stonking/">ubuntu/stonking/</a></li>
 <li><a href="debian-keyring/">debian-keyring/</a> (built off-CI)</li>
 <li><a href="debian-revoked/">debian-revoked/</a> (built off-CI)</li>
+<li><a href="revoked-rpm/">revoked-rpm/</a> (built off-CI)</li>
+<li><a href="revoked-pac/">revoked-pac/</a> (built off-CI)</li>
 </ul><h2>Tree</h2><pre>
 ./alma/10/QMdmm-0.0.2-Linux-6.rpm
 ./alma/10/QMdmm-0.0.2-Linux-dev-common.rpm
 ./alma/10/QMdmm-0.0.2-Linux-dev6.rpm
 ./alma/10/QMdmm-0.0.2-Linux-doc.rpm
-./alma/10/repodata/6cd4cef7d589e41cf3b220c643b38de28c29da1ce7c403e08974c65503907d34-primary.xml.zst
-./alma/10/repodata/9cc813cbaed23938858e617d68e9056a10bcb926e068a6e13175d297bf1c2ca1-filelists.xml.zst
-./alma/10/repodata/abc25aa2ce5e7516ac089c3df294678c855f7fd24106d61ba9cba7796ce4c92f-other.xml.zst
+./alma/10/repodata/0e3dcf61de1a73999534c69246c04a26e6bf19e0193144c19ec12ae3582d9991-filelists.xml.zst
+./alma/10/repodata/5c8247df526057f8df366946d7f46b694288053da2bcc5f13a356cd744a8679d-other.xml.zst
+./alma/10/repodata/b01baa6d4a86d32e648c68c3e8a4514ae0d2035962ee76c172518fa721edbb39-primary.xml.zst
 ./alma/10/repodata/repomd.xml
 ./alma/10/repodata/repomd.xml.asc
 ./arch/rolling/lab.db
@@ -158,27 +184,27 @@ consumer of a published repository does: there is no other channel.
 ./fedora/44/QMdmm-0.0.2-Linux-dev-common.rpm
 ./fedora/44/QMdmm-0.0.2-Linux-dev6.rpm
 ./fedora/44/QMdmm-0.0.2-Linux-doc.rpm
-./fedora/44/repodata/14e91ea0ad97c56f93cc524be9b7ae701a1d59281c7b52171f5396fa96cc25a8-filelists.xml.zst
-./fedora/44/repodata/a8b4a3eb6a87adb65361a768b1f3867e9097a5bd3bd4c4acd6b288e190b48fcd-other.xml.zst
-./fedora/44/repodata/eaa8b5db91c4791d50c3708aa05278722f61e69e13cb6d14b590568e1ce7ba85-primary.xml.zst
+./fedora/44/repodata/00f0ec05c7f605fde17d14419854553d3b094a35e7018bc61d52ab5f61a665db-primary.xml.zst
+./fedora/44/repodata/0a1a81ca2ec83d1e7aa7bcf19d860f43ac597ef84eaa4990be998bb49ecd667c-filelists.xml.zst
+./fedora/44/repodata/5343fadf2534207ea0170eef94c994444816ec43ad5d0952808dd72926e631fe-other.xml.zst
 ./fedora/44/repodata/repomd.xml
 ./fedora/44/repodata/repomd.xml.asc
 ./fedora/45/QMdmm-0.0.2-Linux-6.rpm
 ./fedora/45/QMdmm-0.0.2-Linux-dev-common.rpm
 ./fedora/45/QMdmm-0.0.2-Linux-dev6.rpm
 ./fedora/45/QMdmm-0.0.2-Linux-doc.rpm
-./fedora/45/repodata/6914d8528adf2d74a9bc9363c4a7c3b1b799da18b9c8fca36ee168646210c4aa-other.xml.zst
-./fedora/45/repodata/79dc1fad9a80bec6fc32226810405798c8efd67e4f32d5f54b17641e4fd398af-primary.xml.zst
-./fedora/45/repodata/87b31d793af19e168bc820e15c3320fccc6e46afb6f586c09300363a6c44fec7-filelists.xml.zst
+./fedora/45/repodata/88ae9c9d3c1ee5c652b9ece0659c55319757d774d57492ff70fa59570d8b7108-primary.xml.zst
+./fedora/45/repodata/9c5ac708fd65c7ad67f389cd7d1b13d36b4ef79617b3a92245cb32a54aab7170-other.xml.zst
+./fedora/45/repodata/d04f071adf9a589eb2d07113e55ed6ac25b2ef043a465521878f8bd0b945f6b1-filelists.xml.zst
 ./fedora/45/repodata/repomd.xml
 ./fedora/45/repodata/repomd.xml.asc
 ./fedora/rawhide/QMdmm-0.0.2-Linux-6.rpm
 ./fedora/rawhide/QMdmm-0.0.2-Linux-dev-common.rpm
 ./fedora/rawhide/QMdmm-0.0.2-Linux-dev6.rpm
 ./fedora/rawhide/QMdmm-0.0.2-Linux-doc.rpm
-./fedora/rawhide/repodata/4b6e29b7b2e71732edf10deb9734c1f3456c9cc8e4fbc694da236020728c10cc-filelists.xml.zst
-./fedora/rawhide/repodata/6da72a0e052f52130b1b36c16d3a6369a46b1454de37e992a2e5d35d3ad7544a-primary.xml.zst
-./fedora/rawhide/repodata/a77ff13fdece1942ede249cfa317f4e448125420dacfb682f8739b988d605f6e-other.xml.zst
+./fedora/rawhide/repodata/6b71f644db690dcd045ba60b8e87c26b76d056ad7425f35c65fc45ed46d6c0f9-other.xml.zst
+./fedora/rawhide/repodata/8f829da873385777a633be8bdaf9217755082fbc470bcc89372376a88e6823c3-primary.xml.zst
+./fedora/rawhide/repodata/c61946fc972d1e7001db32d63011fa3bd6745dfd5915b069b52796ea1b23af9d-filelists.xml.zst
 ./fedora/rawhide/repodata/repomd.xml
 ./fedora/rawhide/repodata/repomd.xml.asc
 ./index.html
@@ -189,6 +215,8 @@ consumer of a published repository does: there is no other channel.
 ./keys/fingerprints.txt
 ./keys/manjaro/qmdmm-packages.gpg
 ./keys/qmdmm-root.gpg
+./keys/revoked-fixture-before.gpg
+./keys/revoked-fixture.gpg
 ./keys/rocky/qmdmm-packages.gpg
 ./keys/ubuntu/qmdmm-packages.gpg
 ./manjaro/rolling/lab.db
@@ -201,13 +229,27 @@ consumer of a published repository does: there is no other channel.
 ./manjaro/rolling/lab.files.tar.gz.sig
 ./manjaro/rolling/qmdmm-6-0.0.1-1-x86_64.pkg.tar.zst
 ./manjaro/rolling/qmdmm-6-0.0.1-1-x86_64.pkg.tar.zst.sig
+./revoked-pac/fixture.db
+./revoked-pac/fixture.db.sig
+./revoked-pac/fixture.db.tar.gz
+./revoked-pac/fixture.db.tar.gz.sig
+./revoked-pac/fixture.files
+./revoked-pac/fixture.files.sig
+./revoked-pac/fixture.files.tar.gz
+./revoked-pac/fixture.files.tar.gz.sig
+./revoked-pac/qmdmm-fixture-1.0-1-any.pkg.tar.zst
+./revoked-rpm/repodata/69a3730a283b85a4b3cff7d04bfde3b2b234f0607ebc17319d7a8d143a8e066e-primary.xml.zst
+./revoked-rpm/repodata/6b37cc67608a24beaa81e1191d218f2ffd6b1191dceb5c100bac2e66249d518d-other.xml.zst
+./revoked-rpm/repodata/9b07d97dc6ececed89aac0650b67bfb292647fe9fbaca48f629465be5f53f82b-filelists.xml.zst
+./revoked-rpm/repodata/repomd.xml
+./revoked-rpm/repodata/repomd.xml.asc
 ./rocky/10/QMdmm-0.0.2-Linux-6.rpm
 ./rocky/10/QMdmm-0.0.2-Linux-dev-common.rpm
 ./rocky/10/QMdmm-0.0.2-Linux-dev6.rpm
 ./rocky/10/QMdmm-0.0.2-Linux-doc.rpm
-./rocky/10/repodata/29a3cf9ef4d023988b12ee6f4854592970707939c36253fb19cbac4c3feece33-filelists.xml.zst
-./rocky/10/repodata/6bb30009f36b27ab0a34cdab7758fd1f964070d8f896a2a9e2751946afbb1403-primary.xml.zst
-./rocky/10/repodata/872b08d4b130dab4b5f67b85fce47d03164f7d75e57476c774916dc7111b3788-other.xml.zst
+./rocky/10/repodata/15ff971833db30297b0fce6d678c080c6956d262d1074b47bb15c161bbac1519-filelists.xml.zst
+./rocky/10/repodata/a7684ee43a445c9d9d6b2bd0164907b413b5cae16f20fd42e675aec9213699f5-primary.xml.zst
+./rocky/10/repodata/a8f4a27e913b468a5eeade473ad74ef03654872c7576486ce2dd71f11c97540b-other.xml.zst
 ./rocky/10/repodata/repomd.xml
 ./rocky/10/repodata/repomd.xml.asc
 ./ubuntu/resolute/dists/resolute/InRelease
