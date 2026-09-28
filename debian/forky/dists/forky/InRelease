@@ -5,20 +5,20 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: forky
 Codename: forky
-Date: Mon, 28 Sep 2026 02:10:40 UTC
+Date: Mon, 28 Sep 2026 05:04:42 UTC
 Architectures: all
 Components: main
 Description: QMdmm debian forky repository
 MD5Sum:
- 541cd3fefaf45e1f510ec260263ae42b             1940 main/binary-all/Packages
- 12282b944ca088382382d20b12260b9d              727 main/binary-all/Packages.gz
+ 4776823bb509b62f2f64fb5a8b9bad11             1940 main/binary-all/Packages
+ 19fb045466994ee2def987666944b427              721 main/binary-all/Packages.gz
 SHA256:
- 620c7a24730a6ccb1ec34ad80ee8540711d51a1fa5b88412a1f3074280c54b81             1940 main/binary-all/Packages
- eb23e176735d53bc44b2c8755d7449e12a53be5b58758ff1d662e19119feb76a              727 main/binary-all/Packages.gz
+ d43754faf4efa2d21ea0fa7a396ed2682a343dc51af2838e36dce126853e227f             1940 main/binary-all/Packages
+ 0a9980fd3cf31676b7a0b773d3490171335a4a1c991cc7e6a30b9fe186adba81              721 main/binary-all/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQRSptqSUI9IfqDsbfU/RiLMlc2/tAUCarnMoAAKCRA/RiLMlc2/
-tAWdAQCBn36dc3rL2J6L957zeZOoxrm+LbUqTaOSA03jwHyqHQD/cy2iNy5S7bxA
-U6064A6l50eABv/RJBE9YwAacddSeAQ=
-=Whh3
+iHUEARYKAB0WIQRSptqSUI9IfqDsbfU/RiLMlc2/tAUCarn1agAKCRA/RiLMlc2/
+tP5WAP95c/y4XHDhfNU1vN8F/TNjJzPKt7AmYTyO8atJA+0tUQD/aHxUMnhMyqvC
+SsU9ZAbeu15AsmYAVeWgRTyCi6hJTQM=
+=emCC
 -----END PGP SIGNATURE-----

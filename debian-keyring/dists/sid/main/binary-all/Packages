@@ -1,5 +1,15 @@
-Package: qmdmm-lab
-Version: 1.0
+Package: qmdmm-archive-keyring
+Version: 2026.09.28.1
 Architecture: all
 Maintainer: QMdmm signing lab <lab@example.invalid>
-Description: keyring source (root-signed)
+Section: misc
+Priority: optional
+Description: QMdmm archive signing keys and repository configuration
+ Ships the QMdmm root public key, this distribution's operational
+ subkey, and the sources.list.d entries for both the keyring source
+ and the day-to-day source. Installing it configures both repos.
+Filename: pool/main/q/qmdmm-archive-keyring/qmdmm-archive-keyring_2026.09.28.1_all.deb
+Size: 2084
+MD5sum: d3d0cdd9d6443340748a34deefb7f323
+SHA256: b2da1de1a7183ef97862c778ba43155abb6b0091472f22152cbded8dba5371ac
+

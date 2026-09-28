@@ -3,23 +3,23 @@ Hash: SHA512
 
 Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
-Suite: stable
-Codename: stable
-Date: Sun, 27 Sep 2026 02:33:52 UTC
+Suite: sid
+Codename: sid
+Date: Mon, 28 Sep 2026 04:59:49 UTC
 Architectures: all
 Components: main
 Description: keyring source (root-signed)
 MD5Sum:
- d58f96163bcc3dc4e86c20432d9c77f8              144 main/binary-all/Packages
- 849ecd14ebcd598de403fe49c5ce3a56              151 main/binary-all/Packages.gz
+ 3c132b4cf36661baa0cf075b7139ac86              637 main/binary-all/Packages
+ fe8b01fef1e166736d93900a90f1fb1c              428 main/binary-all/Packages.gz
 SHA256:
- e3f158c3875d9a8fbb7e1c2762e00a5c8092c005e05b091f564dab8b611d23a9              144 main/binary-all/Packages
- e8d95a5be4662a149e3e5530c06a52d15a0bcae04183476977d87ad286e6e5c9              151 main/binary-all/Packages.gz
+ 3e94e997b4233b005a5785c9041ddc7428f9233d4d056bb42b95b04c3e13b472              637 main/binary-all/Packages
+ 9321e37cf45c92bf34bb0c09487c04d8c527f934802584604a8190e9342035ff              428 main/binary-all/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iJEEARYKADkWIQTbBeXZAnE5pJPnyd3NKQ3aKug9OAUCariAkBsUgAAAAAAEAA5t
-YW51MiwyLjUrMS4xMiwwLDMACgkQzSkN2iroPTgYFQEA3w8CC/xl9/PB/nSiryPw
-4Si4ng8Rg91rb8uuwueR4NcA/2z1YazwxzWSYEI37hL6QETHk/v3cvAMAi/fTupH
-ofQB
-=qbHv
+iJEEARYKADkWIQTbBeXZAnE5pJPnyd3NKQ3aKug9OAUCarn0RRsUgAAAAAAEAA5t
+YW51MiwyLjUrMS4xMiwwLDMACgkQzSkN2iroPTi2wQEAi0aK7u+P90q5hIMW4S1W
+LaFZFkcwlCwnpZFS/AoSlsIA/02FxxXWsYetzxEhrJ3T71emeMfdoX7SmjjnYiHx
+eygN
+=fMBr
 -----END PGP SIGNATURE-----
