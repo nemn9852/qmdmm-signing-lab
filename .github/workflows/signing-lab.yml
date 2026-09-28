@@ -19,6 +19,10 @@ name: signing-lab
 #              holding no secret: takes the public keys from Pages, configures
 #              the repository, installs the runtime package - and then asserts
 #              that holding ONLY the root key would not have been enough.
+#              Three cells at the end of B ask the two questions a key that
+#              leaked raises rather than the one a normal run raises: what a
+#              consumer does with a key that has since been revoked, and what a
+#              rotation costs it. Each is a control pair, not a single reading.
 #   C taint    tamper with one metadata file in a local copy of a published
 #              repository and prove the same consumer refuses it. One cell per
 #              (format, consumer) pair, with the untouched copy as a control.

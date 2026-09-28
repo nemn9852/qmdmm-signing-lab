@@ -104,7 +104,15 @@ EOF
   sed 's/^/  | /' "$REPOFILE"
 }
 
-# read_one <label> <key-file> <baseurl> <tagname> -> echoes accepted|refused
+# read_one <label> <key-file> <baseurl> <tag>
+#
+# The verdict goes to $W/<tag>.verdict and everything a human reads goes to
+# stdout. NOT "echo the verdict and capture it", which is what this did first:
+# write_repo below displays the .repo file it just wrote, that display went into
+# the captured value along with the verdict, and the control read as refused
+# while the log one line above it said "dnf lists: qmdmm-6 qmdmm-6-devel ...".
+# FINDINGS 3.12 is this family - a value captured out of a function that also
+# talks to the terminal - and a file is harder to contaminate than a pipe.
 read_one() {
   local label="$1" keyf="$2" base="$3" tag="$4" listed
   echo
@@ -113,31 +121,45 @@ read_one() {
   rm -rf /var/cache/dnf /var/cache/libdnf5
   dnf clean all >/dev/null 2>&1 || true
   dnf -y -q makecache > "$W/$tag.log" 2>&1 || true
-  echo "  --- what dnf said ---" >&2
-  sed 's/^/    /' "$W/$tag.log" >&2
+  echo "  --- what dnf said ---"
+  sed 's/^/    /' "$W/$tag.log"
   listed=$(dnf_packages "$REPO" "$W" || true)
   if [ -n "$listed" ]; then
-    echo "  dnf lists: $(printf '%s' "$listed" | tr '\n' ' ')" >&2
-    echo "  VERDICT: accepted" >&2
-    printf 'accepted'
+    echo "  dnf lists: $(printf '%s' "$listed" | tr '\n' ' ')"
+    printf 'accepted' > "$W/$tag.verdict"
   else
-    echo "  VERDICT: refused" >&2
-    printf 'refused'
+    printf 'refused' > "$W/$tag.verdict"
   fi
+  echo "  VERDICT: $(cat "$W/$tag.verdict")"
 }
 
 fail() { echo "  !! $1"; exit 1; }
 
-v=$(read_one "1) frozen source, key file NOT refreshed  -> must be accepted" \
-             "$W/keys/before.gpg" "$PAGES/$LINE-revoked" r1)
-[ "$v" = accepted ] || fail "the control was refused, so nothing below would mean anything"
+# expected <tag> <wanted> <why>
+expected() {
+  local got
+  got=$(cat "$W/$1.verdict" 2>/dev/null || true)
+  case "$got" in
+    accepted|refused) ;;
+    # No verdict is a failure, never a "refused": reporting a consumer refusing
+    # something when the reading never completed would read as a finding.
+    *) fail "no verdict was recorded for '$1' - the reading did not finish" ;;
+  esac
+  [ "$got" = "$2" ] || fail "expected '$2', got '$got': $3"
+  echo "  corner $1: $got, as required"
+}
 
-v=$(read_one "2) rebuilt source, key file NOT refreshed  -> must be refused" \
-             "$W/keys/before.gpg" "$PAGES/$LINE/$VERSION" r2)
-[ "$v" = refused ] || fail "a consumer that has not refreshed its key can read the new source"
+read_one "1) frozen source, key file NOT refreshed  -> must be accepted" \
+         "$W/keys/before.gpg" "$PAGES/$LINE-revoked" r1
+expected r1 accepted "the control was refused, so nothing below would mean anything"
 
-v=$(read_one "3) frozen source, key file refreshed      -> the measurement" \
-             "$W/keys/after.gpg" "$PAGES/$LINE-revoked" r3)
+read_one "2) rebuilt source, key file NOT refreshed  -> must be refused" \
+         "$W/keys/before.gpg" "$PAGES/$LINE/$VERSION" r2
+expected r2 refused "a consumer that has not refreshed its key can read the new source"
+
+read_one "3) frozen source, key file refreshed      -> the measurement" \
+         "$W/keys/after.gpg" "$PAGES/$LINE-revoked" r3
+v=$(cat "$W/r3.verdict" 2>/dev/null || true)
 if [ "$v" = accepted ]; then
   echo "  -> the revoked outgoing subkey still signs for dnf: rotation does NOT"
   echo "     stop this consumer, which is FINDINGS 10.7 on a real rotated line"
@@ -147,12 +169,12 @@ elif [ "$v" = refused ]; then
   echo "     consume-revoked-dnf.sh for the same assertion."
   fail "the verdict changed from the recorded one (accepted)"
 else
-  fail "unreadable verdict: $v"
+  fail "no verdict was recorded for corner 3 - the reading did not finish"
 fi
 
-v=$(read_one "4) rebuilt source, key file refreshed     -> must be accepted" \
-             "$W/keys/after.gpg" "$PAGES/$LINE/$VERSION" r4)
-[ "$v" = accepted ] || fail "the rotation left the line broken for a refreshed consumer"
+read_one "4) rebuilt source, key file refreshed     -> must be accepted" \
+         "$W/keys/after.gpg" "$PAGES/$LINE/$VERSION" r4
+expected r4 accepted "the rotation left the line broken for a refreshed consumer"
 
 echo
 echo "=== B/rotated (rpm, dnf, $LINE): PASS ==="

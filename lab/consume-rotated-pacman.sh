@@ -89,9 +89,21 @@ echo "  OK: one root key, the outgoing subkey revoked, the incoming one live"
 # actually uses. Needed because "the database was refused" has two possible
 # causes here - the revocation arrived, or the key went missing - and only one
 # of them is the measurement.
+#
+# The question asked of it is USABLE, not "equal to u". The first version of
+# this compared against the literal letter and went red on the arch container
+# while the keyring was fine: `pacman-key --lsign-key` grants the imported key
+# full trust, and a fully trusted key's validity field is `f`, not the `u` that
+# our own keyring shows for our own key. Asserting the letter asked a stricter
+# question than the one that matters and reported a working keyring as broken.
 kr_state() {  # kr_state <subkey-fpr>
   gpg --homedir "$KR" --with-colons --list-keys "$1" 2>/dev/null \
     | awk -F: -v want="$1" '/^pub:/{f=0} /^sub:/{s=$2;f=1} /^fpr:/{if(f && $10==want){print s; exit}}'
+}
+
+kr_usable() {  # kr_usable <subkey-fpr>
+  local s; s=$(kr_state "$1")
+  [ -n "$s" ] && [ "$s" != r ] && [ "$s" != e ] && [ "$s" != d ] && [ "$s" != i ]
 }
 
 set_server() {  # set_server <baseurl>
@@ -114,7 +126,12 @@ lsign() {  # lsign <subkey-fpr>
   fi
 }
 
-# read_one <label> <baseurl> <tag> -> echoes accepted|refused
+# read_one <label> <baseurl> <tag>
+#
+# The verdict goes to $W/<tag>.verdict and everything a human reads goes to
+# stdout - see the longer note in consume-rotated-dnf.sh for why the verdict is
+# not simply echoed and captured: set_server below displays the section it
+# writes, and that display would land in the captured value.
 read_one() {
   local label="$1" base="$2" tag="$3" seen
   echo
@@ -125,51 +142,67 @@ read_one() {
   # repository, so a failure on this one is indistinguishable from a failure on
   # the distribution's own. Ask what pacman can see in THIS repository.
   pacman -Sy --noconfirm > "$W/$tag.log" 2>&1 || true
-  echo "  --- what pacman said ---" >&2
+  echo "  --- what pacman said ---"
   grep -iE 'revok|invalid|corrupted|unknown key|signature|error|warning' "$W/$tag.log" \
-    | head -8 | sed 's/^/    /' >&2 || true
+    | head -8 | sed 's/^/    /' || true
   seen=$(pacman -Sl "$REPO" 2>/dev/null | awk '{print $2}' | sort -u | tr '\n' ' ' || true)
   if [ -n "$seen" ]; then
-    echo "  pacman lists: $seen" >&2
-    echo "  VERDICT: accepted" >&2
-    printf 'accepted'
+    echo "  pacman lists: $seen"
+    printf 'accepted' > "$W/$tag.verdict"
   else
-    echo "  VERDICT: refused (the repository is invisible to pacman)" >&2
-    printf 'refused'
+    echo "  the repository is invisible to pacman"
+    printf 'refused' > "$W/$tag.verdict"
   fi
+  echo "  VERDICT: $(cat "$W/$tag.verdict")"
 }
 
 fail() { echo "  !! $1"; exit 1; }
+
+# expected <tag> <wanted> <why>
+expected() {
+  local got
+  got=$(cat "$W/$1.verdict" 2>/dev/null || true)
+  case "$got" in
+    accepted|refused) ;;
+    # No verdict is a failure, never a "refused": reporting a consumer refusing
+    # something when the reading never completed would read as a finding.
+    *) fail "no verdict was recorded for '$1' - the reading did not finish" ;;
+  esac
+  [ "$got" = "$2" ] || fail "expected '$2', got '$got': $3"
+  echo "  corner $1: $got, as required"
+}
 
 echo
 echo "=== phase A: the keyring a consumer has BEFORE it refreshes ==="
 pacman-key --add "$W/keys/before.gpg" 2>&1 | sed 's/^/    /'
 lsign "$sub_before" || fail "the un-refreshed keyring cannot be built, nothing below would mean anything"
-[ "$(kr_state "$sub_before")" = u ] \
-  || fail "the keyring does not consider the outgoing subkey usable after signing it"
-echo "  keyring state of the outgoing subkey: $(kr_state "$sub_before") (usable)"
+echo "  keyring state of the outgoing subkey: '$(kr_state "$sub_before")'"
+kr_usable "$sub_before" \
+  || fail "the keyring does not consider the outgoing subkey usable after pacman-key signed it"
 
-v=$(read_one "1) frozen source, keyring NOT refreshed  -> must be accepted" \
-             "$PAGES/$LINE-revoked" p1)
-[ "$v" = accepted ] || fail "the control was refused, so nothing below would mean anything"
+read_one "1) frozen source, keyring NOT refreshed  -> must be accepted" \
+         "$PAGES/$LINE-revoked" p1
+expected p1 accepted "the control was refused, so nothing below would mean anything"
 
-v=$(read_one "2) rebuilt source, keyring NOT refreshed  -> must be refused" \
-             "$PAGES/$LINE/$VERSION" p2)
-[ "$v" = refused ] || fail "a consumer that has not refreshed its keyring can read the new source"
+read_one "2) rebuilt source, keyring NOT refreshed  -> must be refused" \
+         "$PAGES/$LINE/$VERSION" p2
+expected p2 refused "a consumer that has not refreshed its keyring can read the new source"
 
 echo
 echo "=== phase B: the same consumer, after refreshing its key material ==="
 pacman-key --add "$W/keys/after.gpg" 2>&1 | sed 's/^/    /'
 lsign "$sub_after" || fail "the incoming subkey cannot be locally signed, so service is not restored"
 # The load-bearing check for corner 3. If the revocation certificate had not
-# actually reached the keyring, corner 3 would be refused for a different
-# reason - or, worse, accepted and read as a finding about pacman.
-echo "  keyring state of the outgoing subkey after the refresh: $(kr_state "$sub_before") (want r)"
-[ "$(kr_state "$sub_before")" = r ] \
-  || fail "the refresh did not bring the revocation certificate into the keyring"
+# actually reached the keyring, corner 3 could be refused for a different reason
+# - or, worse, accepted and read as a finding about pacman.
+echo "  keyring state of the outgoing subkey after the refresh: '$(kr_state "$sub_before")'"
+kr_usable "$sub_before" \
+  && fail "the refresh did not bring the revocation certificate into the keyring"
+echo "  OK: the keyring no longer considers the outgoing subkey usable"
 
-v=$(read_one "3) frozen source, keyring refreshed      -> the measurement" \
-             "$PAGES/$LINE-revoked" p3)
+read_one "3) frozen source, keyring refreshed      -> the measurement" \
+         "$PAGES/$LINE-revoked" p3
+v=$(cat "$W/p3.verdict" 2>/dev/null || true)
 if [ "$v" = refused ]; then
   echo "  -> pacman refuses the outgoing subkey's output once it holds the"
   echo "     certificate, which is FINDINGS 10.7 re-measured on a real rotation"
@@ -178,12 +211,12 @@ elif [ "$v" = accepted ]; then
   echo "     10.7 is out of date and this cell should be flipped."
   fail "the verdict changed from the recorded one (refused)"
 else
-  fail "unreadable verdict: $v"
+  fail "no verdict was recorded for corner 3 - the reading did not finish"
 fi
 
-v=$(read_one "4) rebuilt source, keyring refreshed     -> must be accepted" \
-             "$PAGES/$LINE/$VERSION" p4)
-[ "$v" = accepted ] || fail "the rotation left the line broken for a refreshed consumer"
+read_one "4) rebuilt source, keyring refreshed     -> must be accepted" \
+         "$PAGES/$LINE/$VERSION" p4
+expected p4 accepted "the rotation left the line broken for a refreshed consumer"
 
 echo
 echo "=== B/rotated (pacman, $LINE): PASS ==="

@@ -20,7 +20,7 @@ something to start on every push.
 |---|---|---|---|
 | **A** pack | `stage-a-pack` × 12 | no | QMdmmPackagingCi's *own* `pack-<fmt>.sh` builds real packages inside the row's own distribution image |
 | **S** sign | `stage-s-sign` × 12 | **yes**, one per line | the row's subkey signs the repository it just built — and the root secret is *not* usable in that container |
-| **B** consume | `stage-b-consume` × 12, `stage-b-keyring`, `stage-b-keyring-package`, `stage-b-revoked` × 2 | no | a real consumer, holding no secret, establishes trust the way a user does and then installs from the published repository; and the root key alone would not have been enough |
+| **B** consume | `stage-b-consume` × 12, `stage-b-keyring`, `stage-b-keyring-package`, `stage-b-revoked` × 2, `stage-b-rotated` × 3 | no | a real consumer, holding no secret, establishes trust the way a user does and then installs from the published repository; the root key alone would not have been enough; a revoked key does not stop every consumer; and a **rotation** costs an un-refreshed consumer the repository outright |
 | **C** taint | `stage-c-taint` × 4 | no | tampering with published metadata is detected — with the *untouched* copy as a control |
 | publish | `publish` | no | the site assembled on gh-pages **is** the repository layout |
 
@@ -132,11 +132,20 @@ not share a verification implementation. A later openSUSE row would add a third
 keys/   published public keys
   qmdmm-root.gpg                  root only, no subkeys  -> the keyring repo's Signed-By
   <line>/qmdmm-packages.gpg       root + that line's subkey -> the day-to-day Signed-By
+                                  (after a rotation: root + outgoing[revoked] + incoming,
+                                   because a consumer that refreshed should be told
+                                   "revoked" rather than "unknown key")
+  <line>/qmdmm-packages-before.gpg  the same line, as it looked before its rotation —
+                                  i.e. what a consumer that has NOT refreshed holds.
+                                  A fixture, not something to hand anyone.
   fingerprints.txt
 site/   material that must be built OFF-CI, staged at its published path
   debian-keyring/                 the root-signed keyring source, which now ships
                                   qmdmm-archive-keyring
-  debian-revoked/                 the revoked-subkey fixture
+  debian-revoked/                 the revoked-subkey fixture (debian's rotation)
+  <line>-revoked/                 the same thing for the rotated rpm and pacman
+                                  lines: the source that line published immediately
+                                  before its subkey was rotated
 lab/    the scripts — all reusable, all English
   sign-repo-{deb,rpm,pac}.sh      stage S, format-level
   consume-{apt,dnf,pacman}.sh     stage B, consumer-level
@@ -145,12 +154,15 @@ lab/    the scripts — all reusable, all English
                                   delete every source but the one it configured
   consume-revoked-{dnf,pacman}.sh stage B, revocation is only as good as the
                                   verifier (FINDINGS 10.7)
+  consume-rotated-{dnf,pacman}.sh stage B, what a ROTATION does to a consumer
+                                  (FINDINGS 10.9): four corners, two of which no
+                                  revocation test can reach
   taint-repo.sh                   stage C, tampering must be detected
   mkrepo-debian.sh                build + sign a minimal apt tree (off-CI)
   mkrepo-revoked-{rpm,pac}.sh     build the revoked-key fixtures — in CI, because
                                   the signing key exists only as a secret there
   mkkeyring-deb.sh                build <repo>-archive-keyring (off-CI)
-  rotate-debian-local.sh          rotate one line's subkey (off-CI)
+  rotate-line-local.sh            rotate any line's subkey (off-CI)
   lib-site.sh                     waiting for the deploy, fetching keys, assertions
   lib-tools.sh                    md5sum / sha256sum / dpkg-deb, nothing else
   probe-*.sh                      the one-off probes, kept as the reproducible
@@ -169,10 +181,30 @@ enters a workflow, so both are run on a trusted machine:
     # rebuild the root-signed keyring source after a change to the layout
     bash lab/mkrepo-debian.sh <root-fpr> site/debian-keyring sid "keyring source (root-signed)"
 
-    # rotate one line's subkey: freeze a fixture with it first, revoke it, add a
-    # fresh one, re-sign the keyring source, and print the secret that then has
-    # to be uploaded to that line's environment
-    bash lab/rotate-debian-local.sh debian
+    # rotate any line's subkey (debian|ubuntu|fedora|rocky|alma|arch|manjaro)
+    bash lab/rotate-line-local.sh fedora
 
 Both expect a throwaway keyring plus a `$HOME/qmdmm-signing-lab/env.sh` holding
 `GNUPGHOME` and the fingerprints — that file is not part of the repo.
+
+The rotation, in order, and steps 1 and 2 are the ones that cannot be undone:
+
+1. **freeze what a consumer holds now.** Two files, both taken *before* the
+   revocation: `keys/<line>/qmdmm-packages-before.gpg` — root + outgoing, with no
+   revocation certificate in it — and `site/<line>-revoked/`, the source that
+   line publishes right now. Exported after the revocation, the first one carries
+   the certificate and becomes the *other* cell of the 2x2, which is worse than
+   useless: it looks right. The second is fetched from Pages for the rpm and
+   pacman lines, so it has to happen before the next publish rebuilds the row;
+2. revoke the outgoing subkey;
+3. add a fresh signing subkey;
+4. re-sign what only the root key may sign. For the deb lines that is the keyring
+   source. For the rpm and pacman lines there is no such artifact in this lab, so
+   the step is **absent and says so** rather than being skipped in silence;
+5. re-export the line's public key file as root + outgoing[revoked] + incoming;
+6. write the incoming subkey's secret.
+
+Step 6 does not finish the job. Until the secret is uploaded to that line's
+environment **and** the workflow is re-run, the line has no usable private half
+in CI and stage S fails — which is the honest state, not a bug. Uploading it also
+removes the outgoing key from GitHub, which is half the point.
