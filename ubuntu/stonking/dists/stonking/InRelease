@@ -5,20 +5,20 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: stonking
 Codename: stonking
-Date: Mon, 28 Sep 2026 01:08:10 UTC
+Date: Mon, 28 Sep 2026 01:33:48 UTC
 Architectures: all
 Components: main
 Description: QMdmm ubuntu stonking repository
 MD5Sum:
- 084be7747097a598b65e95c00c5b2d8f             1940 main/binary-all/Packages
- d6b6250e3b19e066bfdd76f0fb35a5c4              725 main/binary-all/Packages.gz
+ 61367d8dd55380d5616eeeadf6658e31             1940 main/binary-all/Packages
+ 49920cbdd060966399889c6aca17add6              722 main/binary-all/Packages.gz
 SHA256:
- 043e20c78fecebfe10ad61f897ed82269d466323467d82a1746ccf0199bdf749             1940 main/binary-all/Packages
- 8b5af1f8558e5108b6d9eb3a1e265b63e66b4bbd0c8509df1b1f793a41bf55e0              725 main/binary-all/Packages.gz
+ ea019c763e51c8ba7a69fd8e46a32b439e90701cade3fabfdd5aab13d969ff6b             1940 main/binary-all/Packages
+ 001b3576fb20e2bb2f5d02abba62846ee74a6c1e8e74001498100c8463fe056d              722 main/binary-all/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQS3c6X5B0wUyreNVTJq0O13Cl+APwUCarm9+gAKCRBq0O13Cl+A
-P6ONAP4juOsoynMZIGvXxNWDCPULov54QeXr+cLg9KVnntsWjAD+JzMWaUhBxbFb
-IxkPExB+hqWOa5etb04JOv82ZCzaAQE=
-=f9S6
+iHUEARYKAB0WIQS3c6X5B0wUyreNVTJq0O13Cl+APwUCarnD/AAKCRBq0O13Cl+A
+P/c2AQDXjQSvaxw7BrAvIjJRceH0rv8BKeJZG7RnNowx9Pd2xAD+IL1VMxROPPkQ
+IFBnDMgPAQVctGFhXDep18FY9riUowY=
+=miFw
 -----END PGP SIGNATURE-----
