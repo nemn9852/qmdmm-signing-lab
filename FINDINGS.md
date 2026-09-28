@@ -308,9 +308,72 @@ subkey can be in the keyring, out of use, and reachable from nothing:
 
     5779CAB6443DA554   debian generation 1 (§1's "Missing key …" evidence)
     301F53C25DFA7FA5   created 2026-09-28 13:02:02, forty seconds before the
-                       fixture subkey that is in use - the shape of a first
-                       attempt that was replaced; what it was for was not
-                       established, and nothing published refers to it
+                       fixture subkey that is in use, and identified when it was
+                       found as a rehearsal product of creating the fixture key
+
+### 3.15 On dnf5, a repository that cannot be verified is refused in silence
+
+dnf4 and dnf5 do not just differ in behaviour; they differ in whether they *say*
+anything. The same pair of readings - one source the key file can verify, one it
+cannot, one repository configuration, nothing different but the key file (§10.9
+readings 1 and 2) - produces this on rocky:10 (dnf 4.20):
+
+    Importing GPG key 0x2AE83D38:
+     Userid     : "QMdmm Signing Lab Root <root@qmdmm-lab.invalid>"
+     Fingerprint: DB05 E5D9 0271 39A4 93E7 C9DD CD29 0DDA 2AE8 3D38
+     From       : /tmp/tmp.dna0XmCUF5/keys/before.gpg
+    Error: Failed to download metadata for repo 'qmdmm-rotated': repomd.xml GPG
+    signature verification error: Signing key not found
+
+and this on fedora:44 (dnf5 5.4.3.0), for **both** of them:
+
+    Importing OpenPGP key 0x2AE83D38:
+     UserID     : "QMdmm Signing Lab Root <root@qmdmm-lab.invalid>"
+     Fingerprint: DB05E5D9027139A493E7C9DDCD290DDA2AE83D38
+     From       : file:///tmp/tmp.Tcl3Z79Opq/keys/before.gpg
+    The key was successfully imported.
+    Metadata cache created.
+
+Including `Metadata cache created.` - which is what the revoked-key fixture cell
+reads as "accepted" (§10.7.1). So on dnf5 "dnf said nothing about the signature"
+is not weak evidence, it is no evidence: the two cases are indistinguishable from
+the outside, and a cell that asserts the absence of an error message asserts
+nothing at all. `dnf makecache` also exits 0 in both cases (§3.2), so it is not
+only the message that fails to carry the answer.
+
+What does carry it is the package listing - six packages from the verifiable
+source, none from the unverifiable one - which is why every verdict in this lab is
+taken from that and not from the text. The rotation cell now *measures* whether
+the log discriminates (bash string comparison, not a tool that may be absent -
+§3.16) and prints which of the two situations it is in, per consumer, rather than
+assuming either.
+
+### 3.16 A tool that is missing reports exactly like a negative answer
+
+`diff -q a b` exits non-zero when the files differ **and** when there is no `diff`.
+fedora:44 does not ship diffutils, so a block written as
+
+    if diff -q "$W/r1.log" "$W/r2.log" >/dev/null 2>&1; then ... else ... fi
+
+took the differ-branch on fedora and made the cell report that dnf *did* name the
+refusal in its log - while the two logs were identical, which is §3.15 measured
+properly. The claim was wrong, the cell was green, and the only reason anyone saw
+it is that the disabled `diff` printed its own complaint on stderr in the middle
+of the block:
+
+    /__w/qmdmm-signing-lab/lab/consume-rotated-dnf.sh: line 214: diff: command not found
+
+Two habits. Compare with what the shell has (bash string comparison here;
+`grep -F -x -v` for the "what did the second file add" line, since grep is present
+wherever grep is), or check for the tool first the way `assert_tls` checks for the
+trust store. And do not blanket-suppress stderr around a comparison: the one line
+that told the truth was the one the `2>&1` was there to hide.
+
+This is the container-tooling half of §3.13 - there a missing trust store, here a
+missing diffutils - and in both the failure surfaced as a plausible reading rather
+than as an error. A script that runs in several images can only rely on what all
+of them have: the rotated dnf script runs in fedora and in rocky, and `diff` is in
+the second one only.
 
 ## 4. rpm is not one behaviour, and it is not an algorithm problem
 
@@ -819,3 +882,146 @@ than gaps** - they are listed so that their absence is not read as an oversight.
   behaved differently, is a counter-example to exactly that assumption. Cells
   here are cheap (metadata only, no package installation), so filling in the
   other eight rows is a reasonable thing to want.
+
+### 10.9 Rotation, measured: what it costs a consumer, and which key file to publish
+
+§10.7 answered "does this consumer consult a revocation certificate", with a key
+that exists only to be revoked. An incident asks something else. A line's subkey is
+compromised, its subkey is replaced, and what happens to everybody holding the old
+key material? That had never been measured, for the plain reason that rotation had
+only ever been performed on debian (§10.8) and no cell existed for it.
+
+`lab/rotate-line-local.sh` now rotates any line in `lab/lines.tsv` - the script it
+replaces accepted `debian` and nothing else, so "rotate fedora's subkey" was a
+process nobody had walked through, whatever the consumer-side behaviour turned out
+to be. It has now been run for real, off CI, four lines:
+
+| line | outgoing, now revoked | incoming | times rotated |
+|---|---|---|---|
+| debian | `…77E9E913C4BC3F61` | `…3F4622CC95CDBFB4` | 2 (§3.14) |
+| fedora | `0CB6055F…8399B375` | `D3032A80…4DCC4024` | 1 |
+| rocky | `D7434719…8E830643` | `32654163…0C797AA3` | 1 |
+| arch | `1D569E0B…09159052` | `56EF6767…31240F4E` | 1 |
+
+Each rotation leaves three artifacts a consumer could be handed, and one source
+that stops existing the moment the line publishes again:
+
+- `keys/<line>/qmdmm-packages-before.gpg` - the key file as it was, root +
+  outgoing, no revocation certificate in it: what a consumer that has NOT
+  refreshed holds. It has to be exported *before* the revocation, which is why the
+  rotation script insists on the order;
+- `keys/<line>/qmdmm-packages.gpg` - the key file as it is now: root +
+  outgoing[revoked] + incoming;
+- `keys/<line>/qmdmm-packages-pruned.gpg` - the same file with the outgoing subkey
+  dropped: root + incoming only. This is the one this section had to add, and the
+  reason is below;
+- `site/<line>-revoked/` - the source the line published immediately before the
+  rotation (metadata only), signed by the outgoing subkey.
+
+That makes a 2x2, and `lab/consume-rotated-{dnf,pacman}.sh` walk all four cells of
+it, once per (format, verifier implementation) the way stage C does: dnf5 5.4.3.0
+on fedora:44, dnf4 4.20 on rocky:10, pacman on archlinux:base. A verdict is "can
+the consumer list a package from this repository" - never the exit code (§3.2) and
+never the log (§3.15).
+
+|  | key material NOT refreshed | key material refreshed |
+|---|---|---|
+| **frozen source** (signed by the outgoing subkey) | **accepted** - the control | rpm **accepted** / pacman **refused** |
+| **rebuilt source** (signed by the incoming subkey) | **refused** | **accepted** |
+
+Both rpm cells gave identical answers, so this is not a dnf-generation difference.
+The two refusals are diagnosed differently, which matters for the second table
+below:
+
+    dnf4,  rebuilt source, un-refreshed key file:
+      Error: Failed to download metadata for repo 'qmdmm-rotated': repomd.xml GPG signature verification error: Signing key not found
+
+    dnf5,  the same reading, says nothing at all (FINDINGS 3.15)
+
+    pacman, rebuilt source, un-refreshed keyring:
+      error: lab: key "56EF6767681BE8778834C5144B8A46BD31240F4E" is unknown
+
+    pacman, frozen source, refreshed keyring (this is the one that differs):
+      error: lab: signature from "QMdmm Signing Lab Root <root@qmdmm-lab.invalid>"
+      is invalid
+
+**Corner 2 is the cost, and nobody had priced it.** A consumer that has not
+refreshed its key material cannot read the *new* source at all - not "sees a
+warning", not "installs without verification": the repository is gone. So "rotate
+the key and let consumers notice" is not a plan. The new key file and the new
+signature have to ship at the same time and be announced as a pair, or every
+consumer that does not update is broken the moment the rotation is published.
+
+**Corner 3 is the leak window, and on rpm it is open.** A consumer that *has*
+refreshed - and therefore holds the revocation certificate, which the cells assert
+rather than assume, by checking the keyring's validity field for the outgoing
+subkey - is handed the old source and accepts it. That is not a bookkeeping fact:
+it means a compromised subkey can keep signing package metadata, from a mirror or
+a copy of the old repository, and every refreshed rpm consumer accepts it, because
+dnf does not consult the certificate (§10.7). pacman refuses the same artifact
+with `signature … is invalid`, and so does apt's `gpgv` with `REVKEYSIG` (§10.2).
+On rpm, the revocation accomplishes nothing; only removing the key does.
+
+**And that is what the extra key file is for.** Corner 3 and corner 2 together
+imply that on rpm it is the *presence* of the revoked subkey in the key file that
+keeps it able to sign - which is an inference, and the recommendation it supports
+is about an artifact people are handed, so the cells measure it instead. Readings
+5 and 6 run the same two sources against the pruned key file:
+
+| reading | key file | source | verdict |
+|---|---|---|---|
+| 5 | pruned (no outgoing subkey) | frozen | **refused** - the window closes |
+| 6 | pruned | rebuilt | **accepted** - and closing it costs nothing |
+
+Both rpm cells: refused then accepted. So the two files are not equivalent, and
+which of them a rotated line publishes is a decision with a measurement behind it:
+
+- **rpm: publish the pruned file.** The courtesy of carrying the outgoing subkey
+  buys literally nothing here - dnf never prints "revoked" (§10.7), and the change
+  it makes to what a *refreshed* consumer accepts is exactly the leak. Dropping it
+  costs the consumer nothing (reading 6) and closes the window (reading 5).
+- **debian: keep carrying it.** `gpgv` honours the certificate, so "revoked" is a
+  diagnosis the consumer can act on rather than an unknown key; that trade - a key
+  whose revocation is enforced but which a consumer is told about - is only
+  available because the verifier does the work.
+- **pacman: either, and now for a stated reason.** Both refusals refuse, and the
+  messages differ - `key … is unknown` for a key it does not have, `signature … is
+  invalid` for one it will not use - so carrying the subkey turns "I have never
+  seen this signer" into "this signer is revoked". That is a real difference and it
+  is a diagnostic one. The pruned counterpart is not measured for pacman, and the
+  cell's header says why rather than leaving it to be read as an oversight: trust
+  here is one global keyring that cannot be un-taught a revocation certificate
+  (§6), so the counterfactual needs a second keyring - a consumer that never
+  existed in this sequence - and the causal question it would answer (does
+  removal change anything) is already closed, because corner 3 is refused *and*
+  the script asserts the certificate arrived.
+
+**One published artifact was silently stale, and the rotation is what made it
+stale.** `keys/fingerprints.txt` names each line's current subkey and the publish
+job pastes it onto the front page of the site. After the three rotations it still
+named the outgoing ones for fedora, rocky and arch, so the site went on
+advertising the keys that had just been revoked as those lines' operational keys,
+with the current ones sitting in the key files next to them. Nothing looked, so
+nothing caught it - the file is hand-maintained and no cell had ever compared it
+with the keys it describes. Now `lab/check-fingerprints.sh` does, from the publish
+job, and `rotate-line-local.sh` rewrites the row it rotates. The gate was checked
+both ways: red on the three stale rows before they were rewritten, green after,
+and red again on a single flipped hex digit. The corrected list is live on the
+site - verified over Pages, not from the working tree.
+
+Two runs went green around this, 51/51 each: `36442600908` at `a1d3506` (the
+readings above) and `36444142798` at `0de8e3c`. Both found a defect that was not a
+rotation: §3.15 (dnf5 refuses in silence, so the log-based assertion in the older
+fixture cell discriminates nothing on the consumer it runs on) and §3.16 (the
+comparison that was supposed to catch that used a tool fedora does not ship, and
+reported the missing tool as a difference).
+
+**Still not covered.** The deb lines have no rotated cell: debian *has* been
+rotated twice, so one could be written, and the reason it has not is that the only
+cell where the verifiers differ is corner 3, and for apt that one is already
+§10.7's `gpgv` row. ubuntu, alma and manjaro have not been rotated, on the
+argument - about consumer behaviour, not procedure - that each shares a verifier
+with a line that has. And the lab itself keeps publishing the *carrying* key file
+for fedora, rocky and arch, because that is the artifact the cells measure; which
+one the project hands to users is now a decision with a reading behind it, and
+changing the published file is a separate step from being able to say why.

@@ -137,7 +137,11 @@ keys/   published public keys
                                    "revoked" rather than "unknown key")
   <line>/qmdmm-packages-before.gpg  the same line, as it looked before its rotation —
                                   i.e. what a consumer that has NOT refreshed holds.
-                                  A fixture, not something to hand anyone.
+                                  A fixture, not something to hand anyone. Exists for
+                                  the lines rotated since it was introduced (fedora,
+                                  rocky, arch); debian's two rotations predate it and
+                                  cannot be reconstructed now, the revocation being
+                                  public.
   <line>/qmdmm-packages-pruned.gpg  the same line with the outgoing (revoked)
                                   subkey dropped — what a rotated line could
                                   publish instead. Not handed to anyone either:
