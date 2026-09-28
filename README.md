@@ -37,6 +37,7 @@ points straight at it:
 | `<pages>/<line>/<version>` | day-to-day source, subkey-signed — 12 of them | `deb [signed-by=…] <pages>/debian/sid sid main`<br>`baseurl=<pages>/fedora/44`<br>`Server = <pages>/arch/rolling` |
 | `<pages>/debian-keyring` | keyring source, **root**-signed | `deb [signed-by=…] <pages>/debian-keyring sid main` |
 | `<pages>/debian-revoked` | fixture signed by a since-revoked subkey | nothing — a test asserts it is *rejected* |
+| `<pages>/revoked-rpm` `<pages>/revoked-pac` | repositories signed by the revoked fixture key | nothing — a test asserts both a rejection and, against the *same* artifact, an acceptance |
 | `<pages>/keys/…` | public keys + fingerprints | what every consumer in this lab fetches |
 
 Each line has **one** subkey covering all of that line's versions: the same key

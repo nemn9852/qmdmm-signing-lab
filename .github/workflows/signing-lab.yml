@@ -120,6 +120,42 @@ jobs:
           path: harness/out/
           if-no-files-found: error
 
+  # ===================== the revocation fixtures =====================
+  # Material for the two formats the debian line cannot speak for: a repository
+  # signed by a key that has since been revoked. FINDINGS 3.1 says revocation is
+  # only as good as the verifier, and 10.7 said this lab had demonstrated it
+  # against gpgv and measured nothing for dnf or pacman. This is the measurement.
+  #
+  # Built here rather than committed, because the signature has to be made with
+  # the key BEFORE it is revoked - gpg refuses to sign with a revoked key - and
+  # the private half lives only in the `fixture` environment. What IS committed
+  # is the two public states of that same key, so one artifact can be made to
+  # produce two verdicts.
+  stage-a-revoked-fixture:
+    name: "A fixture (repository signed by a revoked key, ${{ matrix.fmt }})"
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    environment: fixture
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { fmt: rpm, image: "fedora:44" }
+          - { fmt: pac, image: "archlinux:base" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build a repository signed by the revoked fixture key
+        env:
+          SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
+          OUT: ${{ github.workspace }}/fixture
+        run: bash "$PWD/lab/mkrepo-revoked-${{ matrix.fmt }}.sh"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: revoked-${{ matrix.fmt }}
+          path: fixture
+          if-no-files-found: error
+
   # ================================================================= stage S
   # Sign what stage A produced, once per row, in the row's own image and with
   # that row's subkey. Format-level: this produces a signed repository, and the
@@ -181,7 +217,7 @@ jobs:
   # when the artifact naming moved from per-line to per-(line, version).
   publish:
     name: "publish"
-    needs: [stage-s-sign]
+    needs: [stage-s-sign, stage-a-revoked-fixture]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -214,6 +250,15 @@ jobs:
           echo "  $n signed repository/repositories staged"
           [ "$n" -ge 1 ] || { echo "!! no stage-S artifact to publish"; exit 1; }
 
+          # The revocation fixtures keep their names: they are not rows in the
+          # matrix, so there is no line/version to read out of them.
+          for d in artifacts/revoked-*; do
+            name="${d#artifacts/}"
+            rm -rf "_site/$name"; mkdir -p "_site/$name"
+            cp -r "$d/." "_site/$name/"
+            echo "  $name -> $name  ($(find "$d" -type f | wc -l | tr -d ' ') files)"
+          done
+
           {
             echo '<!doctype html><meta charset="utf-8">'
             echo '<title>QMdmm signing lab</title>'
@@ -226,7 +271,7 @@ jobs:
             for dir in $(cd _site && find . -mindepth 2 -maxdepth 2 -type d | sed 's|^\./||' | sort); do
               echo "<li><a href=\"$dir/\">$dir/</a></li>"
             done
-            for dir in debian-keyring debian-revoked; do
+            for dir in debian-keyring debian-revoked revoked-rpm revoked-pac; do
               [ -d "_site/$dir" ] && echo "<li><a href=\"$dir/\">$dir/</a> (built off-CI)</li>"
             done
             echo '</ul><h2>Tree</h2><pre>'
@@ -407,6 +452,41 @@ jobs:
           ROOT_FPR: ${{ env.ROOT_FPR }}
           EXPECT_SHA: ${{ github.sha }}
         run: bash "$PWD/lab/consume-keyring-package.sh"
+
+  # ============ and the measurement FINDINGS 3.1 asked for: does this consumer
+  # refuse a key that has since been revoked? One cell per format the debian line
+  # could not speak for, each comparing ONE artifact under the two public states
+  # of the same signing key - the tightest form of the control 3.7 asks for,
+  # where the only difference between the accepted and rejected halves is what
+  # the consumer was handed.
+  stage-b-revoked:
+    name: "B revoked (${{ matrix.consumer }})"
+    needs: [publish]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { fmt: rpm, consumer: dnf,    image: "fedora:44" }
+          - { fmt: pac, consumer: pacman, image: "archlinux:base" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Confirm no secret is reachable (a consumer's position)
+        env:
+          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LEAK_CHECK:-}" ]; then
+            echo "!! secret visible without declaring an environment"; exit 1
+          fi
+          echo "OK: this job sees no secret (same position as a consumer)"
+      - name: Check what revocation does to this consumer
+        env:
+          PAGES: ${{ env.LAB_PAGES }}
+          EXPECT_SHA: ${{ github.sha }}
+        run: bash "$PWD/lab/consume-revoked-${{ matrix.consumer }}.sh"
 
   # ================================================================= stage C
   # Tamper with one metadata file in a local copy of a published repository and

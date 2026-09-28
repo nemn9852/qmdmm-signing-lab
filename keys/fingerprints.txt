@@ -70,3 +70,26 @@ keyring source being verifiable by the root key ALONE. So:
 
 Every consumer in this lab takes its keys from <pages>/keys/, which is what a
 consumer of a published repository does: there is no other channel.
+
+The revoked fixture key
+-----------------------
+One key exists only to make revocation measurable, which is why there are two
+public files here for it and one for everything else:
+
+  keys/revoked-fixture-before.gpg   the key as it looked BEFORE it was revoked
+  keys/revoked-fixture.gpg          the same key, with the revocation certificate
+
+  fingerprint  0B1F 7C5A A6FE 619F D3E7  9A73 E851 6372 7018 1DB8
+  keyid        E851637270181DB8
+  status       revoked by the root key
+
+Repositories signed by it are published at <pages>/revoked-rpm and
+<pages>/revoked-pac. Stage B reads the SAME artifact twice: accepted under the
+"before" file, refused under the "after" one. That pair is the whole point -
+FINDINGS 3.1 says revocation is only as good as the verifier, and this is how the
+lab measures dnf and pacman rather than assuming they behave like gpgv.
+
+The private half is not here and does not enter the repository. It lives in the
+`fixture` environment, because the signature has to be made BEFORE the revocation
+(gpg will not sign with a revoked key), which is also why the fixture repository
+is built at run time instead of being committed.
