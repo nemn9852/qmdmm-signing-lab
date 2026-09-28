@@ -249,12 +249,13 @@ second.
 
 ### 3.14 Revoked subkeys are invisible by default, so "revoked" reads as "absent"
 
-`gpg --list-keys` omits revoked subkeys. On this lab's keyring:
+`gpg --list-keys` omits revoked subkeys. On this lab's keyring, after the
+rotations so far - debian twice, then fedora, rocky and arch (§10.9):
 
     gpg --list-keys                                      | grep -c '^sub'  ->  7
-    gpg --list-keys --list-options show-unusable-subkeys | grep -c '^sub'  -> 11
+    gpg --list-keys --list-options show-unusable-subkeys | grep -c '^sub'  -> 14
 
-The four it hides are exactly the four revoked ones. `--with-colons` shows them
+The seven it hides are exactly the seven revoked ones. `--with-colons` shows them
 too, `sub:r:` in the validity field and a `fpr` line to identify them.
 
 That default is how a *revoked* subkey gets read as an *absent* one, and
@@ -285,8 +286,31 @@ than a key.
 Two ways to make `gpg` answer the question instead of inferring it: attempt a
 signature with the subkey (`Unusable secret key` when revoked), and read the
 subkey's packets directly (`sigclass 0x28`, a revocation signature from the key
-that owns it). The lab's keyring holds eleven subkeys, seven live - one per line
-- and none of the four revoked ones is reachable from anything published.
+that owns it). At the time of writing the lab's keyring held eleven subkeys,
+seven live - one per line - and none of the four revoked ones was reachable from
+anything published. After the first rpm and pacman rotations (§10.9) it held
+fourteen: seven live, one per line, and **seven revoked**, of which five are
+reachable from published material. That was checked over Pages rather than from
+the working tree:
+
+| revoked subkey | published in |
+|---|---|
+| `0CB6055F…` | `keys/fedora/qmdmm-packages.gpg` - and *unrevoked* in that line's `-before` file |
+| `D7434719…` | `keys/rocky/qmdmm-packages.gpg` - same |
+| `1D569E0B…` | `keys/arch/qmdmm-packages.gpg` - same |
+| `C0408216…` | `keys/debian/qmdmm-packages.gpg` |
+| `0B1F7C5A…` | both `keys/revoked-fixture*.gpg` - the fixture, a subkey that exists to be revoked |
+
+The last row corrects this section as written: the fixture subkey *is* published,
+in both of its states, because that pair is the whole point of it. What survives
+is the point the section was making, and this is its sharper form - a revoked
+subkey can be in the keyring, out of use, and reachable from nothing:
+
+    5779CAB6443DA554   debian generation 1 (§1's "Missing key …" evidence)
+    301F53C25DFA7FA5   created 2026-09-28 13:02:02, forty seconds before the
+                       fixture subkey that is in use - the shape of a first
+                       attempt that was replaced; what it was for was not
+                       established, and nothing published refers to it
 
 ## 4. rpm is not one behaviour, and it is not an algorithm problem
 
@@ -722,6 +746,21 @@ anything about the signature - turned it red on the next run and produced the
 table above. An empty fixture needs an assertion about the *mechanism*, because
 the packages are absent by construction.
 
+**That fix was half a fix, and §3.15 is where it shows.** On dnf5 *neither* half
+of the cell says anything about the signature - not on the accepted fixture, not
+on the revoked one, not even on a repository the consumer cannot verify at all
+(§10.9 readings 1 and 2 print the same six lines) - so the narrower question has
+the same answer whichever way it goes, and on fedora:44, the consumer this cell
+runs on, it discriminates nothing. The rpm row of the table above therefore rests
+on §10.9, where the same question is put to a repository that can be *listed*:
+six packages under the valid key, none under the revoked one, on both dnf
+generations. The fixture cell is left as it is, with this note saying so: an empty
+fixture can support a mechanism-shaped assertion only if the consumer under test
+has mechanism-shaped output, and this one has none. The fix is a marker package
+inside the fixture, so that "the metadata verified" becomes visible in a listing -
+which is exactly how §10.9's readings 1 and 2 are told apart, on a repository that
+has something to list.
+
 ### 10.8 What this lab does **not** cover
 
 Written down because an unverified thing that is not labelled as unverified tends
@@ -744,21 +783,28 @@ than gaps** - they are listed so that their absence is not read as an oversight.
   installed yet guarantees the release is interrupted *after* the signature is
   already public. See README, "S belongs after C, not after A".
 
-- **Rotating a line's subkey has only ever been done on debian.** §10.7 measures
-  what revocation *does* on all three formats, but with a separate fixture key
-  rather than a rotated line key. The operation itself -
-  `rotate-debian-local.sh`, whose `case` accepts `debian` and nothing else - has
-  never been run against the other six lines, and their
-  `keys/<line>/qmdmm-packages.gpg` files carry no revoked subkey as a result. So
-  "rotate fedora's subkey" is a process nobody has walked through, whatever the
-  consumer-side behaviour turns out to be.
+- **Rotation has been rehearsed on four of the seven lines, and the procedure is
+  no longer debian-only.** This entry replaces one that said the operation had
+  only ever been run on debian and that six lines' key files carried no revoked
+  subkey as a result. Both are now false: `rotate-line-local.sh` takes any line in
+  `lab/lines.tsv`, and it has been run for real on fedora, rocky and arch (§10.9),
+  where the old script's `case` accepted `debian` and nothing else. What is still
+  not covered is ubuntu, alma and manjaro - not on the argument that their
+  procedure differs (procedures are format-level and all three formats have now
+  been run), but on the argument about *consumer behaviour* below, which has to
+  hold or the three rotations were a formality.
 
-- **The other lines' key files carry no revoked subkey.** Only
-  `keys/debian/qmdmm-packages.gpg` does, because that is what the rotation script
-  deliberately does (so a consumer sees "revoked" rather than "unknown key").
-  Every other line ships root plus one live subkey, so if one of them were
-  revoked a consumer would report an unknown key - a worse diagnosis, and a
-  different code path from the one tested.
+- **Three of the seven lines have never been rotated, and their key files reflect
+  that.** ubuntu, alma and manjaro ship root plus one live subkey; debian, fedora,
+  rocky and arch each carry their outgoing subkey with its revocation certificate
+  (§3.14 lists them). The intent of carrying it is that a consumer which has
+  refreshed is told "revoked" rather than "unknown key", and that intent holds for
+  two of the three verifiers: pacman prints `signature from … is invalid` for the
+  revoked signer and `key … is unknown` for one it does not have (§10.9), and apt
+  goes through `gpgv`, which honours the certificate. dnf does neither - it does
+  not consult the certificate and does not say "revoked" (§10.7), so on rpm
+  carrying the subkey buys the diagnosis nothing and costs the revocation, which
+  is §10.9's conclusion.
 
 - **Only the deb format has a keyring/trust-artefact mechanism built at all.**
   The rpm `*-release` package and the pacman keyring package that

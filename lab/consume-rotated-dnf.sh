@@ -199,19 +199,31 @@ expected r2 refused "a consumer that has not refreshed its key can read the new 
 # Readings 1 and 2 differ in one thing only - whether the key file can verify the
 # source - so the two log files are a controlled pair, and what they are worth is
 # a measurement rather than a hope. On dnf4 the refusal is named; on dnf5 the two
-# are byte-identical, "Metadata cache created." included, so on that consumer
-# "dnf said nothing" is not evidence that anything verified. That matters because
-# several cells in this lab (and one control in consume-revoked-dnf.sh, on the
-# empty rpm fixture) have read exactly that as acceptance. FINDINGS 3.15.
+# are identical, "Metadata cache created." included, so on that consumer "dnf said
+# nothing" is not evidence that anything verified. That matters because several
+# cells in this lab (and one control in consume-revoked-dnf.sh, on the empty rpm
+# fixture) have read exactly that as acceptance. FINDINGS 3.15.
+#
+# The comparison is bash's own, not `diff`'s. The first version shelled out to
+# `diff -q`, which fedora:44 does not ship - so "the tool is missing" arrived as
+# a non-zero exit status, the `if` took the differ-branch, and the cell reported
+# on fedora that the refusal IS named in the log while the two logs were
+# identical. It only escaped notice because the shell printed `diff: command not
+# found` on stderr in the middle of the block; with that line suppressed, the
+# claim would have looked exactly like a reading. FINDINGS 3.16.
 echo
 echo "--- does dnf's own output distinguish reading 1 from reading 2? ---"
-if diff -q "$W/r1.log" "$W/r2.log" >/dev/null 2>&1; then
+log1=$(cat "$W/r1.log" 2>/dev/null || true)
+log2=$(cat "$W/r2.log" 2>/dev/null || true)
+if [ "$log1" = "$log2" ]; then
   echo "  no: they printed the same thing. The refusal is silent here, so both"
   echo "  verdicts above rest on the package listing - which is where they are"
   echo "  taken from - and nothing in this cell greps the log for an answer."
 else
   echo "  yes: the refusal is named, and reading 2 added:"
-  diff "$W/r1.log" "$W/r2.log" | grep '^>' | sed 's/^> */    /' || true
+  # -F -x -v against the other file: whole-line, literal, only the extra ones.
+  # No diffutils here either; this one is in every image that has grep.
+  grep -Fxv -f "$W/r1.log" "$W/r2.log" 2>/dev/null | sed 's/^/    /' || true
 fi
 
 read_one "3) frozen source, key file refreshed      -> the measurement" \
