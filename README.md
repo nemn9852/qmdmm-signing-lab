@@ -33,8 +33,8 @@ that repository's own `ci/pack-<fmt>.sh` inside the row's distribution image, so
 "does stage A still build real packages" is answered by that repository's script
 rather than by a copy of it. Nothing under `lab/` builds a package.
 
-**The stage letters mean different things in the two repositories.** Read them
-from their own repo:
+The two pipelines divide the questions up like this — and the letters they use
+for their stages are **local to each pipeline**:
 
 | | QMdmmPackagingCi | this lab |
 |---|---|---|
@@ -42,21 +42,40 @@ from their own repo:
 | B | `runtime-<fmt>.sh` — install the runtime package from a **local tree with the signature question switched off**: `[trusted=yes]` on deb, `gpgcheck=0` on rpm, an unsigned `repo-add` on pac | `consume-<consumer>.sh` — install the runtime package from the **published, subkey-signed repository over HTTPS**, key fetched from Pages |
 | C | `dev-<fmt>.sh` + `build-verify-*` — install the *dev* package, then build a consumer project against it | `taint-repo.sh` — tampering with published metadata is detected |
 
-So that repo's B and this lab's B install the same package and ask different
-questions. That one takes the signature out of the picture so that the answer is
-about the dependency closure; this one puts a signature in and asks whether a
-consumer holding only the published key ends up with a working install. The
-dev-package path — that repo's C, and the heaviest thing it proves — is **not**
-rehearsed here at all.
-
-The order differs too, and deliberately. All three of that repo's stages run
-locally against a local tree; signing is what this lab inserts, and it inserts it
-*between* packing and consuming (A → S → publish → B), because a consumer that
-may only read what was published cannot be staged any earlier.
+**The dev-package path is that repo's C, and it stays there.** This lab's consumer
+only has to answer the question a signature raises — does the package install with
+the repository's signature intact — so it installs the runtime package and stops.
+Whether the dev package's dependency closure is complete is a question about
+package *content*, and that repo already answers it with a clean container and a
+real consumer project. Stage A is running that repo's pack script verbatim, so
+repeating its C here would mean importing its B as well, for an answer that is
+already published. The consumer cells still assert the dev and doc packages are
+*served* by the repository (`served == built`); they just do not install them.
 
 Where that repo has no counterpart at all, this lab adds the trust chain itself:
 `stage-a-revoked-fixture`, `stage-b-keyring`, `stage-b-keyring-package`,
 `stage-b-revoked`, `stage-c-taint`.
+
+### The order here is a rehearsal, not the rule
+
+This lab signs first and consumes afterwards — `A → S → publish → B` — because a
+consumer that may only read what was published cannot be staged any earlier. That
+is a property of the rehearsal, not a statement about the pipeline.
+
+**The packaging repo must do the opposite: signing has to be gated on B and C
+having passed.** A signature asserts that the thing it covers is worth trusting.
+Appending it to packages that nobody has installed yet means the release gets
+interrupted *after* the signature is already public — which is exactly the
+failure this ordering would be there to prevent. So the port is A → B → C → S,
+not A → S → B.
+
+### The colliding names are a port-time rename
+
+That repo names its stages `A pack` / `B runtime` / `C dev`; this lab names its
+`A pack` / `S sign` / `B consume` / `C taint`. Its B and this lab's B are
+different stages that happen to share a letter, which is a readability problem
+rather than a design one. It goes away when the signing stages move into that
+repo, where they should be named for what they do rather than reuse the letters.
 
 ## Published layout
 

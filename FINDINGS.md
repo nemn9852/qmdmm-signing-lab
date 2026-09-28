@@ -681,10 +681,30 @@ anything about the signature - turned it red on the next run and produced the
 table above. An empty fixture needs an assertion about the *mechanism*, because
 the packages are absent by construction.
 
-### 10.8 What this lab still does **not** cover
+### 10.8 What this lab does **not** cover
 
 Written down because an unverified thing that is not labelled as unverified tends
-to be read as a verified one.
+to be read as a verified one. The first two entries are **scope decisions rather
+than gaps** - they are listed so that their absence is not read as an oversight.
+
+- **The dev package's dependency closure is not tested here.** That is
+  QMdmmPackagingCi's C, and it stays there. This lab's consumer answers the
+  question a signature raises - does the package install with the repository's
+  signature intact - which is not the same question as whether the package's own
+  dependencies are complete. Stage A already runs that repo's pack script, so
+  importing its C would mean importing its B with it, for an answer that repo
+  already publishes. The consumer cells still assert the dev and doc packages are
+  *served* (`served == built`); they just do not install them.
+
+- **Signing runs before consuming here, and must not do so in the packaging repo.**
+  The rehearsal signs first only because a consumer that may only read what was
+  published cannot be staged any earlier - and that repo's B and C have the same
+  problem from the other side, since they run against a local `file://` tree.
+  The port has to invert this: **gate the signature on B and C having passed.**
+  A signature asserts that what it covers is worth trusting, and appending it to
+  packages nobody has installed yet guarantees the release is interrupted *after*
+  the signature is already public. See README, "The order here is a rehearsal,
+  not the rule".
 
 - **Rotating a line's subkey has only ever been done on debian.** §10.7 measures
   what revocation *does* on all three formats, but with a separate fixture key
