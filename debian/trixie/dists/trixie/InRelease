@@ -5,20 +5,20 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: trixie
 Codename: trixie
-Date: Mon, 28 Sep 2026 01:34:16 UTC
+Date: Mon, 28 Sep 2026 02:02:07 UTC
 Architectures: all
 Components: main
 Description: QMdmm debian trixie repository
 MD5Sum:
- 1f69767ba2538aca2ccd3ae7a5d010e4             1939 main/binary-all/Packages
- da76c35f5dbd5952672a1f2d9b0d0b77              724 main/binary-all/Packages.gz
+ cedac08b655348c477eb0f1a02a49554             1939 main/binary-all/Packages
+ 9d7760801ebd38a3840a5d6a60b8ad85              728 main/binary-all/Packages.gz
 SHA256:
- b5774d001c41d2590945789ce908d3d4c8d5f2a7e07c3ded8a6d78a7eadb3cb5             1939 main/binary-all/Packages
- 4914f1c99b9c6eb799e5ad0baa01b97391221e17d2c083d819156de585406166              724 main/binary-all/Packages.gz
+ 335aa6efdc2c9d3d47bdea62ec6661c8df766f417e7ff814ca8c21b04e339b98             1939 main/binary-all/Packages
+ 7c54ffaba171454d670a67f7cfe79bc55a7577b3f032242ad087e3564cced939              728 main/binary-all/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQRSptqSUI9IfqDsbfU/RiLMlc2/tAUCarnEGAAKCRA/RiLMlc2/
-tIJ4AQC49nZdhnJ0u/+XlGgaaNuLpwIJjKBDc44IDRMnD4ocpAEAmYTTqNfr/ybF
-Xz/2GbTytoEx/DteQdSLGTsM1bZKlAw=
-=dbRn
+iHUEARYKAB0WIQRSptqSUI9IfqDsbfU/RiLMlc2/tAUCarnKnwAKCRA/RiLMlc2/
+tJKdAQCuGmoPrXkx+8Y/yT1m7OtSOse22QYgKvgqQx2d2JYlAAEAmLe6BsefvwlY
+mfKBHpeM2ZS9UhVxUzfcO8PPMPbnDAY=
+=fIVD
 -----END PGP SIGNATURE-----
