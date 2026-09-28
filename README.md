@@ -11,14 +11,16 @@ Results and traps: **[FINDINGS.md](FINDINGS.md)**.
 
 ## What one run does
 
-Five stages, in order. All of it is `workflow_dispatch` only: a run is twelve
-real Qt 6 builds, which is not something to start on every push.
+Five stages of its own, in order (they are not the same five as the pipeline
+below — see "How this relates to QMdmmPackagingCi"). All of it is
+`workflow_dispatch` only: a run is twelve real Qt 6 builds, which is not
+something to start on every push.
 
 | Stage | Jobs | Declares `environment:` | What it proves |
 |---|---|---|---|
 | **A** pack | `stage-a-pack` × 12 | no | QMdmmPackagingCi's *own* `pack-<fmt>.sh` builds real packages inside the row's own distribution image |
 | **S** sign | `stage-s-sign` × 12 | **yes**, one per line | the row's subkey signs the repository it just built — and the root secret is *not* usable in that container |
-| **B** consume | `stage-b-consume` × 12, `stage-b-keyring`, `stage-b-keyring-package`, `stage-b-revoked` × 2 | no | a real consumer, holding no secret, installs from the published repository; and the root key alone would not have been enough |
+| **B** consume | `stage-b-consume` × 12, `stage-b-keyring`, `stage-b-keyring-package`, `stage-b-revoked` × 2 | no | a real consumer, holding no secret, establishes trust the way a user does and then installs from the published repository; and the root key alone would not have been enough |
 | **C** taint | `stage-c-taint` × 4 | no | tampering with published metadata is detected — with the *untouched* copy as a control |
 | publish | `publish` | no | the site assembled on gh-pages **is** the repository layout |
 
@@ -28,46 +30,54 @@ consumer's position rather than a rehearsal of one.
 
 ## How this relates to QMdmmPackagingCi
 
-Stage A reimplements nothing. It checks out **QMdmm/QMdmmPackagingCi** and runs
-that repository's own `ci/pack-<fmt>.sh` inside the row's distribution image, so
-"does stage A still build real packages" is answered by that repository's script
-rather than by a copy of it. Nothing under `lab/` builds a package.
+One pipeline — four stages from that repository, two from this one:
 
-The two pipelines divide the questions up like this — and the letters they use
-for their stages are **local to each pipeline**:
+    CI.A pack → CI.B runtime → CI.C dev → S sign → B consume
 
-| | QMdmmPackagingCi | this lab |
+| Stage | Lives in | What it establishes |
 |---|---|---|
-| A | `pack-<fmt>.sh` — builds the packages | the same script, nothing added |
-| B | `runtime-<fmt>.sh` — install the runtime package from a **local tree with the signature question switched off**: `[trusted=yes]` on deb, `gpgcheck=0` on rpm, an unsigned `repo-add` on pac | `consume-<consumer>.sh` — install the runtime package from the **published, subkey-signed repository over HTTPS**, key fetched from Pages |
-| C | `dev-<fmt>.sh` + `build-verify-*` — install the *dev* package, then build a consumer project against it | `taint-repo.sh` — tampering with published metadata is detected |
+| **A** pack | QMdmmPackagingCi | the packages exist |
+| **B** runtime | QMdmmPackagingCi | the runtime dependency closure is complete — with the signature question switched off (`[trusted=yes]` on deb, `gpgcheck=0` on rpm, an unsigned `repo-add` on pac) |
+| **C** dev | QMdmmPackagingCi | the *dev* package is sufficient to build a consumer project against |
+| **S** sign | this lab | the repository is signed by that line's subkey |
+| **B** consume | this lab | the trust bootstrap: install the keyring, establish trust, install the signed package |
 
-**The dev-package path is that repo's C, and it stays there.** This lab's consumer
-only has to answer the question a signature raises — does the package install with
-the repository's signature intact — so it installs the runtime package and stops.
-Whether the dev package's dependency closure is complete is a question about
-package *content*, and that repo already answers it with a clean container and a
-real consumer project. Stage A is running that repo's pack script verbatim, so
-repeating its C here would mean importing its B as well, for an answer that is
-already published. The consumer cells still assert the dev and doc packages are
-*served* by the repository (`served == built`); they just do not install them.
+**Stage A reimplements nothing.** It checks that repository out and runs its own
+`ci/pack-<fmt>.sh` inside the row's distribution image; nothing under `lab/`
+builds a package.
 
-Where that repo has no counterpart at all, this lab adds the trust chain itself:
-`stage-a-revoked-fixture`, `stage-b-keyring`, `stage-b-keyring-package`,
-`stage-b-revoked`, `stage-c-taint`.
+**This lab's B consume stays, and it is not that repo's B.** Its subject is the
+*trust bootstrap* — the path a real user walks: install the keyring, establish
+trust in the line's key, then install a package signed by it. Two halves:
 
-### The order here is a rehearsal, not the rule
+- `stage-b-keyring` and `stage-b-keyring-package` are the "install the keyring"
+  half. The keyring arrives as a **package**, from a source the **root key alone**
+  verifies; the cell then throws away every source it wrote by hand, so that what
+  carries the repository configuration is the package and nothing else.
+- `stage-b-consume` (× 12) is the "establish trust, then install" half. It takes
+  the line's public key the way a consumer would, trusts it, and installs the
+  runtime package from the signed repository — having first asserted, in the same
+  cell, that holding the root key alone is *not* enough.
 
-This lab signs first and consumes afterwards — `A → S → publish → B` — because a
-consumer that may only read what was published cannot be staged any earlier. That
-is a property of the rehearsal, not a statement about the pipeline.
+The dev package is not installed here because its dependency closure is that
+repo's C, and that is a question about package *content* rather than about trust.
+The consumer cells still assert the dev and doc packages are **served**
+(`served == built`); they just do not install them.
 
-**The packaging repo must do the opposite: signing has to be gated on B and C
-having passed.** A signature asserts that the thing it covers is worth trusting.
-Appending it to packages that nobody has installed yet means the release gets
-interrupted *after* the signature is already public — which is exactly the
-failure this ordering would be there to prevent. So the port is A → B → C → S,
-not A → S → B.
+Where that repo has no counterpart at all, this lab adds the rest of the trust
+chain: `stage-a-revoked-fixture`, `stage-b-revoked`, `stage-c-taint`.
+
+### S belongs after C, not after A
+
+That repo's B and C do not run here, so the workflow reads
+`A → S → publish → B` — those two stages are **absent, not reordered**. The
+pipeline the two repositories form *together* is the five-stage one above.
+
+**S must not run until that repo's B and C have passed.** A signature asserts that
+the thing it covers is worth trusting, so appending it to packages nobody has
+installed yet means the release gets interrupted *after* the signature is already
+public — which is the failure that gate exists to prevent. The port therefore
+reads `A → B → C → S`.
 
 ### The colliding names are a port-time rename
 
