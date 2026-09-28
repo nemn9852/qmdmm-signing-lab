@@ -134,6 +134,15 @@ EOF
     echo "  control lists: $(printf '%s' "$ctl" | tr '\n' ' ')"
     ;;
   pac)
+    # Same as the pacman consumer: this keyring has public keys and, in a base
+    # image that has never needed to sign anything, no secret key. --lsign-key
+    # signs with it, so it has to exist first.
+    if ! gpg --homedir /etc/pacman.d/gnupg --list-secret-keys 2>/dev/null | grep -q '^sec'; then
+      echo "  (the pacman keyring has no secret key; creating one)"
+      pacman-key --init
+      gpg --homedir /etc/pacman.d/gnupg --list-secret-keys 2>/dev/null | grep -q '^sec' \
+        || { echo "  !! pacman-key --init did not produce a key this keyring can sign with"; exit 1; }
+    fi
     pacman-key --add "$W/keys/packages.gpg" 2>&1 | sed 's/^/    /'
     pacman-key --lsign-key "$sub" 2>&1 | sed 's/^/    /'
     cat >> /etc/pacman.conf <<EOF

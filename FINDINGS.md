@@ -196,6 +196,27 @@ and gave no hint at all. The fix is a `sed -n 's/^PRETTY_NAME=…'` helper inste
 of renaming the variable, because renaming only defends against the collisions
 you happened to hit today.
 
+### 3.11 `apt-get update` exits 0 when a source fails to verify
+
+It falls back to the index files it already holds:
+
+    Err:1 https://…/debian/sid sid InRelease
+      Sub-process /usr/bin/sqv returned an error code (1), error message is:
+      Missing key 52A6DA92508F487EA0EC6DF53F4622CC95CDBFB4, which is needed to verify signature.
+    W: An error occurred during the signature verification. The repository is not
+       updated and the previous index files will be used.
+    W: Some index files failed to download. They have been ignored, or old ones used instead.
+
+Two warnings, no `E:` line, exit status **0** - and it says "the previous index
+files will be used" out loud, which is the mechanism: the source was rejected
+and the package list from the *previous, valid* fetch is still there to be used.
+
+This is §3.2's shape in the other package manager, and it caught the same
+assertion. "The update must fail" was green in the run where apt had just
+rejected the signature. What works instead is to clear `/var/lib/apt/lists`
+first and then ask what apt can still see: if `apt-cache search` can list a
+package from that source, the source was accepted, whatever the exit status said.
+
 ## 4. rpm is not one behaviour, and it is not an algorithm problem
 
 The lab assumed one rpm line would stand in for all rpm distros. That is wrong,
@@ -519,15 +540,22 @@ Two consequences of the same mistake were fixed with it: `keys/` carried only
 the first five lines (no `ubuntu/`, no `manjaro/`), and `site/`'s keyring package
 pointed consumers at `<pages>/<line>` rather than `<pages>/<line>/<suite>`.
 
-### 10.4 One thing here is a prediction, not a measurement
+### 10.4 dnf's `--qf` was never the problem; the missing `\n` was
 
-`consume-dnf.sh` tries `--qf` and then `--queryformat` when listing a
-repository's packages, because dnf5 is documented as having renamed the option
-and this lab runs both a dnf5 line (fedora) and dnf4 lines (rocky, alma). The
-two-option probe is deliberately harmless if that is wrong - it costs one failed
-command - but it has **not** been observed in this lab yet. If a later run shows
-dnf5 rejecting `--qf` and accepting `--queryformat`, this paragraph should be
-replaced with the measurement rather than kept as a hedge.
+This section previously predicted that `--qf` would turn out to be a dnf4
+spelling and `--queryformat` the dnf5 one. The measurement says otherwise:
+`--qf` is accepted by both, and the actual defect was in the format string -
+`--qf '%{name}'` has no newline. dnf applies the format string per package, so
+every name was concatenated into one long word:
+
+    served: qmdmm-6qmdmm-6-develqmdmm-common-develqmdmm-doc
+    built:  qmdmm-6 qmdmm-6-devel qmdmm-common-devel qmdmm-doc
+
+which then failed a comparison against the list stage A built, and reported a
+mismatch that pointed at the repository while the repository was fine. The fix
+is `--qf '%{name}\n'`. The three-way fallback (`--qf`, `--queryformat`,
+`list --available`) is kept anyway: it costs one failed command, and the third
+shape is genuinely different rather than a spelling of the other two.
 
 ### 10.5 The first run: 26 green, 17 red, and two causes
 

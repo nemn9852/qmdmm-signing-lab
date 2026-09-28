@@ -114,13 +114,22 @@ echo "--- B) the same source with the ROOT key only -> must be refused ---"
 # changes, so the refusal cannot come from anything else.
 echo "deb [signed-by=$KEYDIR/root.gpg] $PAGES/$LINE/$VERSION $VERSION main" > "$src"
 cat "$src" | sed 's/^/  | /'
-if apt-get update -o Dir::Etc::sourcelist="$src" -o Dir::Etc::sourceparts="$W/none" \
-       > "$W/neg.log" 2>&1; then
-  echo "  !! apt accepted a source signed by a subkey while holding only the root key"
+# The exit code is deliberately NOT the assertion here. apt-get update falls back
+# to the index files it already has when a source fails to verify, prints only
+# warnings, and returns 0 - the same shape of trap as FINDINGS 3.2, in the other
+# package manager. So the index is cleared first and the question asked is the
+# one that actually matters: can apt still see a package from a source whose
+# signature it just rejected?
+rm -rf /var/lib/apt/lists/*
+apt-get update -o Dir::Etc::sourcelist="$src" -o Dir::Etc::sourceparts="$W/none" \
+       > "$W/neg.log" 2>&1 || true
+if apt-cache search --names-only '^qmdmm' | cut -d' ' -f1 | grep -q .; then
+  echo "  !! apt still lists packages from a source signed under a key it does not hold"
   sed 's/^/    /' "$W/neg.log"; exit 1
 fi
 echo "  OK: refused, as it must be"
-grep -iE 'no_pubkey|is not signed|public key|NO_PUBKEY|missing' "$W/neg.log" | head -4 | sed 's/^/    /' || true
+grep -iE 'no_pubkey|is not signed|Missing key|not signed|signature verification failed' \
+     "$W/neg.log" | head -4 | sed 's/^/    /' || true
 
 echo
 echo "=== B/apt $LINE $VERSION: PASS ==="

@@ -263,6 +263,30 @@ jobs:
             git push -q origin gh-pages
             echo "pushed gh-pages"
           fi
+      - name: Wait for Pages to actually serve it
+        env:
+          PAGES: ${{ env.LAB_PAGES }}
+        run: |
+          set -euo pipefail
+          # A branch deploy is asynchronous, and the CDN in front of Pages can
+          # keep answering with the previous deploy for a while afterwards.
+          # Waiting here - once - is cheaper and more honest than making every
+          # consumer cell wait on its own: they start only after Pages is
+          # serving the site this run built, and a stubborn CDN fails one job
+          # with a clear message instead of seventeen.
+          for i in $(seq 1 120); do
+            raw=$(curl -fsSL --max-time 15 \
+                        -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+                        "$PAGES/publish.json?cb=${RANDOM}${RANDOM}" 2>/dev/null || true)
+            got=$(printf '%s' "$raw" | tr -d ' \n' | sed -n 's/.*"sha":"\([0-9a-f]*\)".*/\1/p')
+            if [ "$got" = "$GITHUB_SHA" ]; then
+              echo "Pages is serving ${got:0:7} (after $i poll(s))"
+              exit 0
+            fi
+            echo "Pages still serves ${got:-nothing} - waiting"
+            sleep 10
+          done
+          echo "!! Pages never served ${GITHUB_SHA:0:7}"; exit 1
 
   # ================================================================= stage B
   # The consumer half, one cell per row: same twelve (line, version) pairs, but

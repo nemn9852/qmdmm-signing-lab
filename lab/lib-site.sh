@@ -13,14 +13,19 @@
 
 wait_for_publish() {
   local pages="$1" expect="$2" got="" raw="" i
-  for i in $(seq 1 90); do
-    # The cache-buster is not decoration. Pages is served through a CDN, and a
-    # plain repeated request can keep answering with the previous deploy long
-    # after the branch has moved - two cells of one run waited fifteen minutes
-    # for a publish that other cells in the same run were already reading.
+  for i in $(seq 1 120); do
+    # Twenty minutes, and both defences are needed. Pages is served through a
+    # CDN, and a repeated request can keep answering with the previous deploy
+    # long after the branch has moved - two cells of one run waited fifteen
+    # minutes for a publish that other cells in the same run were already
+    # reading. A cache-buster alone did not fix it, so no-cache headers are
+    # asked for as well.
+    #
     # curl exits 22 on an HTTP error; under `set -e` that would kill the script,
     # so swallow it and treat "no answer" as "not yet".
-    raw=$(curl -fsSL --max-time 15 "$pages/publish.json?cb=${RANDOM}${RANDOM}" 2>/dev/null || true)
+    raw=$(curl -fsSL --max-time 15 \
+                -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+                "$pages/publish.json?cb=${RANDOM}${RANDOM}" 2>/dev/null || true)
     got=$(printf '%s' "$raw" | tr -d ' \n' | sed -n 's/.*"sha":"\([0-9a-f]*\)".*/\1/p')
     if [ "$got" = "$expect" ]; then
       echo "  site is live at ${got:0:7} (waited ${i} poll(s))"
@@ -48,21 +53,33 @@ wait_for_publish() {
 # command never ran properly" look identical from the outside and only one of
 # them is a finding. `-y` is on every call: dnf4 asks whether to import the
 # repository's key, and with no stdin that answer becomes "no".
+#
+# The `\n` in the format strings is load-bearing. `--qf '%{name}'` is applied to
+# each package in turn, so without a newline every name is concatenated into one
+# long word - "qmdmm-6qmdmm-6-develqmdmm-common-develqmdmm-doc" - which then
+# fails a comparison against the built package list for a reason that looks like
+# a repository problem and is a missing escape.
 dnf_packages() {  # dnf_packages <repo-id> <workdir>
   local repo="$1" w="$2" out="" f
-  out=$(dnf -y -q repoquery --repo="$repo" --qf '%{name}' 2>"$w/q1.err") || true
+  out=$(dnf -y -q repoquery --repo="$repo" --qf '%{name}\n' 2>"$w/q1.err") || true
   if [ -z "$out" ]; then
-    out=$(dnf -y -q repoquery --repo="$repo" --queryformat '%{name}' 2>"$w/q2.err") || true
+    out=$(dnf -y -q repoquery --repo="$repo" --queryformat '%{name}\n' 2>"$w/q2.err") || true
   fi
   if [ -z "$out" ]; then
     out=$(dnf -y -q list --available --repo="$repo" 2>"$w/q3.err" \
           | awk 'NF>=3 {print $1}' | sed 's/\.[^.]*$//' | grep -v '^$' | sort -u) || true
   fi
   if [ -z "$out" ]; then
-    echo "  --- none of the three ways of listing this repository returned anything ---"
-    for f in "$w"/q1.err "$w"/q2.err "$w"/q3.err; do
-      if [ -s "$f" ]; then echo "    $(basename "$f"):"; sed 's/^/      /' "$f"; fi
-    done
+    # On stderr, and that matters: the callers capture stdout to get the package
+    # list, so an explanation written to stdout becomes a "package name" and the
+    # failure is then reported as "dnf still lists <the explanation> from the
+    # tampered repository" - the exact opposite of what happened.
+    {
+      echo "  --- none of the three ways of listing this repository returned anything ---"
+      for f in "$w"/q1.err "$w"/q2.err "$w"/q3.err; do
+        if [ -s "$f" ]; then echo "    $(basename "$f"):"; sed 's/^/      /' "$f"; fi
+      done
+    } >&2
     return 1
   fi
   printf '%s\n' "$out"
