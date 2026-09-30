@@ -182,6 +182,11 @@ lab/    the scripts — all reusable, all English
                                   the signing key exists only as a secret there
   mkkeyring-deb.sh                build <repo>-archive-keyring (off-CI)
   rotate-line-local.sh            rotate any line's subkey (off-CI)
+  assert-revision-tag.sh          assert a revision names a TAG upstream. The
+                                  guard a release run needs and a smoke run does
+                                  not; written here because it is the one piece
+                                  the release workflow needs that no cell in
+                                  this lab can be asked for by a matrix.
   lib-site.sh                     waiting for the deploy, fetching keys, assertions
   lib-tools.sh                    md5sum / sha256sum / dpkg-deb, nothing else
   probe-*.sh                      the one-off probes, kept as the reproducible
