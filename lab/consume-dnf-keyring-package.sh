@@ -18,7 +18,9 @@
 #   A. holding only the ROOT key, the keyring source is readable and it offers
 #      this line's release package - the one bootstrap step a user does by hand
 #   A'. the same ROOT key against the DAY-TO-DAY source is not enough: the
-#      subkey, and only the subkey, may sign that one
+#      subkey, and only the subkey, may sign that one. This is the step that
+#      makes A a claim about the two layers rather than about a file, and the
+#      step that caught a wrong root pin on 2026-10-01 - see the note at A'.
 #   B. the package brings the line's key and the repository definition with it,
 #      and the key file it ships really is this line's operational subkey
 #   C. with the hand-made stanza removed, the repository still works on nothing
@@ -72,7 +74,18 @@ echo "--- keys, from Pages only ---"
 fetch "$PAGES/keys/qmdmm-root.asc"      "$W/keys/root.asc"
 fetch "$PAGES/keys/$LINE/qmdmm-packages.gpg" "$W/keys/packages.gpg"
 rootfpr=$(key_fpr "$W/keys/root.asc")
+nsub=$(count_subkeys "$W/keys/root.asc")
+echo "  root: $rootfpr   subkeys: $nsub   (it must carry none)"
 [ "$rootfpr" = "$ROOT_FPR" ] || { echo "  !! the published root key is $rootfpr, not $ROOT_FPR"; exit 1; }
+# The same assertion consume-dnf.sh makes about the deb-side pin, and the one
+# whose absence made the two rpm cells of run 36836722274 report a *scheme*
+# failure for what was a wrong file. The line keys are subkeys of the root key,
+# so an armored export taken without the trailing bang carries all of them, and
+# a bootstrap key that can already verify the day-to-day source makes A' below
+# impossible to pass for the honest reason. Checked here, by name, so that the
+# diagnosis names the file instead of arriving as "the split does not hold".
+[ "$nsub" = 0 ] \
+  || { echo "  !! the root pin carries $nsub subkey(s); the line keys are subkeys of the root key, so this file can verify sources it must not"; exit 1; }
 sub=$(live_sub_fpr "$W/keys/packages.gpg")
 [ -n "$sub" ] || { echo "  !! the line's key file carries no usable subkey"; exit 1; }
 echo "  root: ${ROOT_FPR: -16}   line subkey: ${sub: -16}"
@@ -121,6 +134,15 @@ echo "--- A') the DAY-TO-DAY source with the ROOT key only -> must serve nothing
 # The negative half of the two-layer split, and the reason it comes before the
 # package is installed: a repository that verifies under either key would make
 # "the subkey is what signs this line" an untested sentence.
+#
+# It is also the step that paid for itself. In run 36836722274 both rpm cells
+# failed here, listing four packages, and the cause was not dnf and not the
+# signature: the site was publishing an armored root key exported WITHOUT the
+# trailing bang, so it carried every line's subkey and the split was real on
+# the signing side and absent on the verifying side. The assertion above now
+# names that file directly; this step stays because it is the only reading that
+# is about behaviour - a pin can be subkey-free and still be the wrong key, and
+# it can be the right key and still be handed to dnf in a way that re-roots.
 cat > "/etc/yum.repos.d/$NEG.repo" <<EOF
 [$NEG]
 name=QMdmm day-to-day ($LINE $VERSION), root key only

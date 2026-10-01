@@ -132,12 +132,20 @@ not share a verification implementation. A later openSUSE row would add a third
 ```
 keys/   published public keys
   qmdmm-root.gpg                  root only, no subkeys  -> the keyring repo's Signed-By
-  qmdmm-root.asc                  the same key, armored. The rpm side needs this
+  qmdmm-root.asc                  the same key, armored - and root only, the
+                                  same as the .gpg. The rpm side needs this
                                   form twice over: `rpm --import` refuses the
                                   binary export (FINDINGS 3.7), and `gpgkey=`
                                   names a file under /etc/pki/rpm-gpg, which is
                                   armored RPM-GPG-KEY convention. Rewritten by
-                                  mkkeyring-rpm.sh so the two cannot drift.
+                                  mkkeyring-rpm.sh, which asserts the three
+                                  things that make it the same pin: the root
+                                  fingerprint, no subkeys, and byte equality
+                                  with the .gpg once dearmored. The subkey
+                                  count is not a formality - the line keys ARE
+                                  subkeys of the root key, so an export taken
+                                  without the trailing bang hands a consumer a
+                                  key that verifies every line's source.
   <line>/qmdmm-packages.gpg       root + that line's subkey -> the day-to-day Signed-By
                                   (after a rotation: root + outgoing[revoked] + incoming,
                                    because a consumer that refreshed should be told

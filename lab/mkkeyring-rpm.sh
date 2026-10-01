@@ -263,9 +263,35 @@ echo "  OK: the keyring source verifies under the root key alone"
 # The armored form of the root key, so a consumer can follow rpm's own
 # convention (`gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-...`) with the file
 # the site publishes rather than with a conversion it does itself.
-gpg --batch --yes --armor --export "$ROOT" > keys/qmdmm-root.asc
+#
+# `"$ROOT!"`, with the bang, and it is not decoration. The line keys are
+# SUBKEYS of the root key, so a plain `--export "$ROOT"` emits the primary key
+# together with every line's signing subkey. A consumer handed that file can
+# verify a day-to-day source it was never supposed to be able to read, and the
+# two-layer split - root signs the keyring source, the line's subkey signs the
+# day-to-day one - stops being a property of the keys and becomes a property of
+# the file. It is invisible in step A of the consumer cell, because the keyring
+# source is signed by the primary key and that is in both files; it only shows
+# up one step later. consume-dnf.sh has asserted `subkeys: 0` on the deb-side
+# pin since it was first written; this file did not, and run 36836722274 is
+# what that cost - both rpm cells, on the very same assertion, in the very same
+# words. The three checks below are that assertion plus the two ways a
+# regenerated pin can drift from the key it claims to be.
+gpg --batch --yes --armor --export "$ROOT!" > keys/qmdmm-root.asc
 chmod 644 keys/qmdmm-root.asc
-echo "  keys/qmdmm-root.asc  $(wc -c < keys/qmdmm-root.asc | tr -d ' ') bytes"
+ascsz=$(wc -c < keys/qmdmm-root.asc | tr -d ' ')
+ascfpr=$(key_fpr keys/qmdmm-root.asc)
+ascsub=$(count_subkeys keys/qmdmm-root.asc)
+echo "  keys/qmdmm-root.asc  $ascsz bytes, $ascfpr, $ascsub subkey(s)"
+[ "$ascfpr" = "$ROOT" ] \
+  || { echo "  !! the armored root pin is $ascfpr, not the root key $ROOT"; exit 1; }
+[ "$ascsub" = 0 ] \
+  || { echo "  !! the armored root pin carries $ascsub subkey(s); it must carry none"; exit 1; }
+# And it has to be the same key the deb and pacman cells are handed: two
+# published encodings of one pin, never two pins. A rebuild that picked up a
+# different keyring would satisfy the two checks above and still be wrong.
+gpg --dearmor < keys/qmdmm-root.asc | cmp -s - keys/qmdmm-root.gpg \
+  || { echo "  !! the armored root pin is not the same key as keys/qmdmm-root.gpg"; exit 1; }
 
 echo
 echo "=== built $OUT ==="
