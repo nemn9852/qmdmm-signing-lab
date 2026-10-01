@@ -5,20 +5,20 @@ Origin: QMdmm Signing Lab
 Label: QMdmm Signing Lab
 Suite: sid
 Codename: sid
-Date: Thu, 01 Oct 2026 08:33:26 UTC
+Date: Thu, 01 Oct 2026 08:50:20 UTC
 Architectures: all
 Components: main
 Description: QMdmm debian sid repository
 MD5Sum:
- 8d8cf336c70663425397b5cf7a635be6             1940 main/binary-all/Packages
- 87e8f3a46e7464db9abf01c9c51feba2              729 main/binary-all/Packages.gz
+ 02cec6155759ab7f6c3dc5102a0677e3             1940 main/binary-all/Packages
+ 16ec177b92ab837a6b058868c1052f99              722 main/binary-all/Packages.gz
 SHA256:
- 8eeb38a1685ebca2f67324d9f06e06141906f57d4f7f93f400f25a12f0f02674             1940 main/binary-all/Packages
- 7655e0ff8a8cd1d4f849aa6e52da1ccf54f71181b204bc81b43709201801c520              729 main/binary-all/Packages.gz
+ 69a4d8a600c20b9c254a48c40e7eb0cff52d4cfa799cd3bfab2b0c2a56a60bfb             1940 main/binary-all/Packages
+ beb6e0f911255b13a5bd562bd6cb5b7c11c17059c2238dadf18db134d044c6f6              722 main/binary-all/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYKAB0WIQRSptqSUI9IfqDsbfU/RiLMlc2/tAUCar4a1gAKCRA/RiLMlc2/
-tCOxAQDylqY/X+SWBuLupkMO6uQDhycnsQHsnVJ6VTDNzSwNWQD6A15Mh77xI+6a
-PMLD0w4OxtNodMfHVmqpP1DgueTd4Ao=
-=MIqX
+iHUEARYKAB0WIQRSptqSUI9IfqDsbfU/RiLMlc2/tAUCar4ezAAKCRA/RiLMlc2/
+tLoAAP9RryHEhpr0B4B3zBUswlJR31ZvBGL/5N6MCKq5SMYCrAEArf/lblr5m5BZ
+/lTEYM14wlvtg4bvp/VwKZ9Ujs7EuQI=
+=fBgM
 -----END PGP SIGNATURE-----
