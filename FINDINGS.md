@@ -1058,3 +1058,36 @@ the two halves are one pair - using stage A's own `openssl pkey ... | cmp -` cal
 so a mismatch fails in seconds rather than after a build - and that a signed
 message verifies while a tampered copy of the same message does not. The Alpine
 row of the packaging run is what covers the rest.
+
+### 11.1 The reading that covers the rest
+
+The packaging run at `960b4ba7` closed it: the Alpine row went green end to end,
+and three things in it are the ones this machine could reach.
+
+Stage A writes the secret to `~builder/.abuild/qmdmm-release-6abe0b34.rsa` and
+compares it against the committed public half with stage A's own
+`openssl pkey -in "$priv" -pubout -outform DER | cmp - <(openssl pkey -pubin -in
+"$pub" -outform DER)`. **This is the first time the value of a GitHub secret has
+been checked against what the repository says the key is.** The API cannot read
+a secret back, so until a runner does this, "the secret is set" is a claim about
+a keystroke rather than about bytes - and it is the same gap the seven GPG lines
+still have. It passed.
+
+Stage A then asserts, for each of the four packages and for the index, that the
+member list contains `.SIGN.RSA.qmdmm-release-6abe0b34.rsa.pub`: the expected
+name derived from `$PACKAGER_KEY`, matched exactly (`grep -qxF`) against what
+`abuild-sign` actually wrote.
+
+Stage C runs in a container that declares no environment and therefore holds no
+secret at all. It installs the committed public half into `/etc/apk/keys/`,
+`apk update` succeeds, `apk add qmdmm-dev` resolves and installs, and the
+consumer project builds against it. That is the name-as-identity claim measured
+rather than argued: one string has to be in the signature member, in the
+consumer's trust directory, and in `PACKAGER_KEY`, and the line only works when
+all three agree.
+
+Two things this reading does **not** cover. The packages came from the run's own
+artifact (`file://$PWD/pkgs`), not from a published site, so it says nothing
+about a consumer fetching them over the network. And it says nothing about the
+seven GPG lines: their secrets remain unread in the sense above, and only
+`release.yml` signing with them can close that.
