@@ -182,6 +182,12 @@ lab/    the scripts — all reusable, all English
                                   the signing key exists only as a secret there
   mkkeyring-deb.sh                build <repo>-archive-keyring (off-CI)
   rotate-line-local.sh            rotate any line's subkey (off-CI)
+  genesis-production.sh           create the PRODUCTION root + one sign-only subkey
+                                  per line, and the public/secret material each
+                                  Environment needs (off-CI). Rehearsed here; it
+                                  prints the environment/secret commands rather
+                                  than running them, because those leave traces
+                                  that outlive a mistake in the script.
   assert-revision-tag.sh          assert a revision names a TAG upstream. The
                                   guard a release run needs and a smoke run does
                                   not; written here because it is the one piece
