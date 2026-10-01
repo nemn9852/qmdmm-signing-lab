@@ -25,6 +25,7 @@ Consumers get the root public key from Pages and verify with it; a leaked
 | Per-line subkey signs day-to-day source; consumers verify it | **pass** |
 | **Keyring source verified with the per-line subkey's key** | **REJECTED** |
 | Day-to-day source verified with a refreshed (rotated) key file | **pass** |
+| rpm bootstrap: a root-signed source hands a consumer the `*-release` package, which then configures the day-to-day source on its own (§10.10) | **pass** |
 | **Source signed by a revoked subkey, verified after rotation** | **REJECTED** |
 | Root secret absent inside every signing container | **pass** |
 | Rotating one line leaves the root key and the other lines untouched | **pass** |
@@ -388,6 +389,34 @@ taken, and it separates "a runtime is present but no registry answers" from "the
 tag is missing". The rule the two cases share: a negative answer and an absent
 capability must not share a shape. Only one of them is evidence, and a check that
 could not run gets believed exactly as readily as one that ran and said no.
+
+### 3.17 `gpg --export <fpr>` is not "the key", it is "the key and everything under it"
+
+`gpg --export` takes the whole key: the primary key **and every subkey**. Only the
+trailing bang, `--export <fpr>!`, limits it to the primary key alone. That is the
+same bang `--local-user` needs (§4.1's signing side), and on the signing side a
+missing one is visible immediately, because a subkey then signs where only the
+primary key should have. On the *verifying* side it is invisible: a file that
+carries more keys than it should still verifies everything the correct file
+verifies, so every positive assertion passes.
+
+This cost a run. The lab's line signing keys are subkeys of the root key, and the
+armored root pin was exported without the bang, so it carried all fourteen of
+them; two consumer cells then reported "the two-layer split does not hold" for a
+file-shaped cause (§10.10). Two rules follow, and they are the general ones rather
+than this file's:
+
+- **An exported trust anchor is a claim about a set of keys, so assert the set.**
+  `count_subkeys(pin) == 0` is one line and it names the file in the failure. A
+  behavioural assertion downstream of it - here, "the root key alone cannot read
+  the day-to-day source" - detects the same thing but reports it as a property of
+  the scheme, which sends you to the wrong half of the system.
+- **An invariant that exists on one of two parallel sides is not an invariant.**
+  `consume-dnf.sh` had asserted `subkeys: 0` on the deb-side pin since it was
+  first written; the rpm half, written months later by the same hand, did not.
+  Where two paths do the same thing in two formats, the assertions have to be
+  copied across deliberately - the second writer sees the *shape* of the first
+  script and inherits its flow, not its checks.
 
 ## 4. rpm is not one behaviour, and it is not an algorithm problem
 
@@ -888,10 +917,12 @@ than gaps** - they are listed so that their absence is not read as an oversight.
   serves `qmdmm-archive-keyring` and `site/<line>-keyring` serves the rpm
   `*-release` package, each from a source only the root key signs, so each gives
   a consumer holding nothing but a fingerprint a way in (README, "Running it").
-  On pacman no such package can be protected by repository configuration at all -
-  trust is one global keyring and the repo stanza does not scope it (§6) - so the
-  key has to be distributed out of band and checked by fingerprint. That is a
-  documentation problem, not a package waiting to be written.
+  Both are now measured: the deb half since `stage-b-keyring-package-deb` existed,
+  the rpm half in §10.10. On pacman no such package can be protected by repository
+  configuration at all - trust is one global keyring and the repo stanza does not
+  scope it (§6) - so the key has to be distributed out of band and checked by
+  fingerprint. That is a documentation problem, not a package waiting to be
+  written.
 
 - **`stage-c-taint` covers four (format, consumer) pairs, not twelve rows**, on
   purpose: tamper detection is a property of the format and the refusal is a
@@ -1044,6 +1075,99 @@ with a line that has. And the lab itself keeps publishing the *carrying* key fil
 for fedora, rocky and arch, because that is the artifact the cells measure; which
 one the project hands to users is now a decision with a reading behind it, and
 changing the published file is a separate step from being able to say why.
+
+### 10.10 The rpm trust bootstrap, measured - and the pin it first shipped was the wrong export
+
+Two cells, one per live dnf generation (`fedora:44`, dnf5 5.4.3.0; `rockylinux/
+rockylinux:10`, dnf4 on rpm 4.19.1.1), each starting from nothing but a key
+fingerprint read off the website. The mechanism is `mkkeyring-rpm.sh` off-CI and
+`consume-dnf-keyring-package.sh` in stage B; the shape is §5's two layers plus
+the bootstrap argument in §10.8.
+
+Four readings. The first run of it, `36836722274`, failed on the third, on both
+cells, in the same words.
+
+**0 - the keyring source is signed by the ROOT key, read off the published
+bytes.** `GOODSIG CD290DDA2AE83D38` on both cells, over the exact `repomd.xml`
+fetched from Pages, checked through the status stream rather than the exit code -
+the discipline §10.2 and §3.1 ask for, because `gpg --verify` calls a signature
+good whatever key made it. dnf is not consulted for this one on purpose: stage A
+of the chain is a claim about a signature, and dnf's agreement is reading A.
+
+**A - holding only the root key, the root-signed source is readable and offers
+exactly one package** (`qmdmm-release-fedora-44`, `qmdmm-release-rocky-10`), from
+a stanza the consumer writes by hand:
+
+    [qmdmm-bootstrap]
+    baseurl=<pages>/<line>-keyring
+    gpgcheck=0          # the bootstrap package itself is not signed
+    repo_gpgcheck=1     # the protection is the root-signed repomd.xml
+    gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-qmdmm-root
+
+**A' - the same root key against the DAY-TO-DAY source must serve nothing.** This
+is where `36836722274` went red, listing `qmdmm-6 qmdmm-6-devel qmdmm-common-devel
+qmdmm-doc` on both fedora 44 and rocky 10. It was not dnf and not a signature.
+
+The line signing keys are **subkeys of the root key** — not separate keys that the
+root key has signed. `keys/qmdmm-root.gpg` is the primary key alone (279 bytes,
+`subkeys: 0`), and the mounted root of the failure was that `mkkeyring-rpm.sh`
+produced the armored companion with
+
+    gpg --armor --export "$ROOT"          # no trailing bang
+
+so `keys/qmdmm-root.asc` was 7737 bytes carrying the primary key **and all
+fourteen of the lab's line subkeys**. A consumer handed that file can verify any
+line's day-to-day source, which makes the two-layer split true on the signing side
+and absent on the verifying side — and **step A cannot see it**, because the
+keyring source is signed by the primary key and the primary key is in both
+versions of the file. Reading 2 was green before the fix and green after it.
+
+The assertion that was missing is the one `consume-dnf.sh` has made about the
+deb-side pin since it was written:
+
+    [ "$nsub" = 0 ] || ... the root key file carries subkeys; it must carry none
+
+The rpm half never got it, and the cost was a scheme-shaped failure
+("the split does not hold") for what was a wrong file. Both halves now assert it,
+and `mkkeyring-rpm.sh` asserts three things about the pin it writes: the root
+fingerprint, `subkeys: 0`, and that the armored file **dearmors to exactly
+`keys/qmdmm-root.gpg`** — two published encodings of one pin, never two pins. The
+regenerated file is 457 bytes and satisfies all three. `4338ff7`, and the same
+run that carries it is 53/53.
+
+**A' after the fix, and the two generations do not agree on how to say it.** On
+rocky 10 (dnf4) the refusal is loud, once per way of listing the repository:
+
+    Error: Failed to download metadata for repo 'qmdmm-neg':
+      repomd.xml GPG signature verification error: Signing key not found
+
+On fedora 44 (dnf5) there is **no message at all** - the cell prints nothing under
+the heading, and the only reading that separates "refused" from "never asked" is
+that all three listing paths returned an empty set. This is §3.15 arriving in a
+new place: the negative half of the bootstrap has mechanism-shaped output on one
+generation and none on the other, so an assertion written as "dnf said something
+about the signature" would be green on rocky and would discriminate nothing on
+fedora. The assertion is on the package list for that reason.
+
+**B and C - the package is what configures the repository.** Installing
+`qmdmm-release-<line>-<ver>` puts `/etc/yum.repos.d/qmdmm.repo` (mode 644) and
+`/etc/pki/rpm-gpg/RPM-GPG-KEY-qmdmm-<line>` (896 bytes) on disk; the key file it
+ships is the line's **current** subkey (`EC773BB34DCC4024` fedora,
+`5D6DC95D0C797AA3` rocky) with **0 unusable subkeys**, i.e. the pruned file, which
+is §10.9's answer for this format. Then the hand-made stanza is deleted: only
+`qmdmm.repo` is left, and on nothing but the package's own configuration the
+day-to-day source serves the same four packages and installs `qmdmm-6-0.0.2-1`.
+That last step is the acceptance criterion (§10.8's bullet, and the README's
+"Running it"): a `*-release` package that installs but configures nothing looks
+exactly like a working one until this point.
+
+**What this does not cover.** The bootstrap package is not signed and is not meant
+to be - what protects it is the signed checksum in the metadata it is served
+through, which is why the stanza is `gpgcheck=0` with `repo_gpgcheck=1` and not
+the other way round. And the cells fetch the site over the public Pages URL, so
+they do cover the network path the deb keyring cell covers; what they do not cover
+is a *real* user's first contact, which is a download page and a fingerprint
+comparison that no runner can make on the user's behalf.
 
 ## 11. The Alpine line's own key
 
