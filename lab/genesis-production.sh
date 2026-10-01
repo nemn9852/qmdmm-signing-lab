@@ -134,8 +134,13 @@ for L in $PROD_LINES; do
                | awk -F: '/^sub:/{n++} END{print n+0}')
   [ "$roots_only" = 0 ] \
     || { echo "  !! $L: qmdmm-root.gpg carries $roots_only subkey(s); it must be root only"; exit 1; }
+  # Published material must be readable. The whole script runs under umask 077
+  # (it creates private keys), so without this every public file comes out 600 -
+  # which is not a leak, but it does break anything that reads as another user.
+  chmod 644 "$PROD_OUT/$L/qmdmm-root.gpg" "$PROD_OUT/$L/qmdmm-packages.gpg"
   echo "  $L  root-only $(wc -c < "$PROD_OUT/$L/qmdmm-root.gpg" | tr -d ' ') B, root+P_i $(wc -c < "$PROD_OUT/$L/qmdmm-packages.gpg" | tr -d ' ') B"
 done
+chmod 644 "$ROOT_PUB"
 
 echo
 echo "--- 4) one secret per line, for that line's Environment ---"
@@ -158,7 +163,17 @@ for L in $PROD_LINES; do
     || { echo "  !! $L: secret.asc has sec=$nsec ssb=$nssb (want 1 1)"; exit 1; }
   [ "$got_sub" = "$SUB" ] \
     || { echo "  !! $L: secret.asc holds $got_sub, not this line's $SUB"; exit 1; }
-  echo "  $L  secret.asc $(wc -c < "$PROD_OUT/$L/secret.asc" | tr -d ' ') B mode $(stat -f '%Lp' "$PROD_OUT/$L/secret.asc")"
+  # Modes asserted, not assumed: a 644 secret is a real leak and a 600 public key
+  # is a real breakage, and both are one `umask` away in either direction.
+  for f in "$PROD_OUT/$L/secret.asc" "$PROD_OUT/$L/secret.b64"; do
+    m=$(stat -f '%Lp' "$f")
+    [ "$m" = 600 ] || { echo "  !! $L: $(basename "$f") is mode $m, must be 600"; exit 1; }
+  done
+  for f in "$PROD_OUT/$L/qmdmm-root.gpg" "$PROD_OUT/$L/qmdmm-packages.gpg"; do
+    m=$(stat -f '%Lp' "$f")
+    [ "$m" = 644 ] || { echo "  !! $L: $(basename "$f") is mode $m, must be 644 - published material"; exit 1; }
+  done
+  echo "  $L  secret.asc $(wc -c < "$PROD_OUT/$L/secret.asc" | tr -d ' ') B mode 600"
 done
 
 echo
@@ -217,7 +232,9 @@ echo "--- 6) the fingerprint list users will be told to compare ---"
   while IFS=$'\t' read -r L SUB; do
     printf '  %-8s%s  %s\n' "$L" "$(printf '%s' "${SUB:0:20}" | sed -E 's/(....)/\1 /g; s/ $//')" "$(printf '%s' "${SUB:20}" | sed -E 's/(....)/\1 /g; s/ $//')"
   done < "$PROD_OUT/lines.tsv"
-} | tee "$PROD_OUT/fingerprints.txt"
+} | tee "$PROD_OUT/fingerprints.txt" >/dev/null
+chmod 644 "$PROD_OUT/fingerprints.txt" "$PROD_OUT/lines.tsv"
+cat "$PROD_OUT/fingerprints.txt"
 
 echo
 echo "=== nothing else is automatic. Run these yourself, after reading them: ==="
@@ -246,6 +263,6 @@ Two things this script left open on purpose:
     unprotected root secret sitting next to its own keyring is not a backup, it
     is a second copy of the same exposure.
   - The uid can be amended later without changing the key (`--edit-key adduid`),
-    so a `.invalid` address today is not a permanent mistake - but every
+    so a placeholder address today is not a permanent mistake - but every
     consumer-facing copy of the public key has to be re-published afterwards.
 NOTE
