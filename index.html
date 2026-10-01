@@ -119,12 +119,14 @@ is built at run time instead of being committed.
 <li><a href="fedora/44/">fedora/44/</a></li>
 <li><a href="fedora/45/">fedora/45/</a></li>
 <li><a href="fedora/rawhide/">fedora/rawhide/</a></li>
+<li><a href="fedora-keyring/">fedora-keyring/</a> (built off-CI)</li>
 <li><a href="fedora-revoked/">fedora-revoked/</a> (built off-CI)</li>
 <li><a href="keys/">keys/</a> (built off-CI)</li>
 <li><a href="manjaro/rolling/">manjaro/rolling/</a></li>
 <li><a href="revoked-pac/">revoked-pac/</a> (built off-CI)</li>
 <li><a href="revoked-rpm/">revoked-rpm/</a> (built off-CI)</li>
 <li><a href="rocky/10/">rocky/10/</a></li>
+<li><a href="rocky-keyring/">rocky-keyring/</a> (built off-CI)</li>
 <li><a href="rocky-revoked/">rocky-revoked/</a> (built off-CI)</li>
 <li><a href="ubuntu/resolute/">ubuntu/resolute/</a></li>
 <li><a href="ubuntu/stonking/">ubuntu/stonking/</a></li>
@@ -133,9 +135,9 @@ is built at run time instead of being committed.
 ./alma/10/QMdmm-0.0.2-Linux-dev-common.rpm
 ./alma/10/QMdmm-0.0.2-Linux-dev6.rpm
 ./alma/10/QMdmm-0.0.2-Linux-doc.rpm
-./alma/10/repodata/29b3e48e2e0f913cafc19f34afe928543f0475e3068fc4791ec2f5ce2360172b-other.xml.zst
-./alma/10/repodata/632f9dee5c1bdf192b2e83620b0ea4769221115fb2d68b12a840df8f0670265b-primary.xml.zst
-./alma/10/repodata/eb36ae7c1827d3923b710af7bfa04e9dfa5b57e1d08cfa553781940eea8a89b2-filelists.xml.zst
+./alma/10/repodata/7ebe84b520bccd796c77b01e22175047f5940d056b3a11a093cde9918a9fa186-primary.xml.zst
+./alma/10/repodata/f6fa85fc1b3d4f31b783f00ea1be4ec0ad5b2d7fc4d8a547bda24a1121551c97-other.xml.zst
+./alma/10/repodata/f9c0c5bb20a76c1d53c476fe8a5949c927b9bc8787e08091f83119d4a2aa81d3-filelists.xml.zst
 ./alma/10/repodata/repomd.xml
 ./alma/10/repodata/repomd.xml.asc
 ./arch-revoked/lab.db
@@ -183,6 +185,12 @@ is built at run time instead of being committed.
 ./debian/trixie/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev-common.deb
 ./debian/trixie/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-dev6.deb
 ./debian/trixie/pool/main/q/qmdmm/QMdmm-0.0.2-Linux-doc.deb
+./fedora-keyring/qmdmm-release-fedora-44-1.0-1.noarch.rpm
+./fedora-keyring/repodata/0b45dc8b3dec3393274b1dfcf86aa91455cdb5d57cc95a5c303e7790d183b82b-filelists.xml.zst
+./fedora-keyring/repodata/7db8b7507dfa98fd56459adfe980c63655c36c1847cee958bb98961172f40f06-other.xml.zst
+./fedora-keyring/repodata/ed08bcc913beaafc0bbe13f64916823617e872c1219d684d8a4a5b45a3720e46-primary.xml.zst
+./fedora-keyring/repodata/repomd.xml
+./fedora-keyring/repodata/repomd.xml.asc
 ./fedora-revoked/repodata/47a7c0733a1d8de0202e4aa29f4feb351ee0a4eee040e61755cba83e060ec07a-filelists.xml.zst
 ./fedora-revoked/repodata/85955e548183a8b1879fdb3b2a820d7fabc771b3b292ca8fd92c9b4b94757b46-other.xml.zst
 ./fedora-revoked/repodata/9dc1ef0feccdaf307af387140556992d8f3671451ac798d8de95ee7fadbbc5ee-primary.xml.zst
@@ -192,27 +200,27 @@ is built at run time instead of being committed.
 ./fedora/44/QMdmm-0.0.2-Linux-dev-common.rpm
 ./fedora/44/QMdmm-0.0.2-Linux-dev6.rpm
 ./fedora/44/QMdmm-0.0.2-Linux-doc.rpm
-./fedora/44/repodata/00afd5fff7db0fc522e5e303525850b4cb631a94d4df418e5b4809b70ac17bb5-other.xml.zst
-./fedora/44/repodata/2a5f705298a36148462b62438390368ffef0113ea8640efb7ef18662f3d32d89-primary.xml.zst
-./fedora/44/repodata/632f3ce046d8bf54954853beae4c805b01dc98a4678677807ed53e1440cbdfec-filelists.xml.zst
+./fedora/44/repodata/7a52675b3660547bd7d97b476f8a3ea9fb9e2fe20c42faa81bd8a8fa9c362db5-other.xml.zst
+./fedora/44/repodata/7ce901bdfd5fba64f2d560a5fcbef0ca335548b233de523f6c5b63279a411f78-filelists.xml.zst
+./fedora/44/repodata/9bfe29b9491fbeabce487ec49928019fb3ea57a083d2264146cdb93c905f402b-primary.xml.zst
 ./fedora/44/repodata/repomd.xml
 ./fedora/44/repodata/repomd.xml.asc
 ./fedora/45/QMdmm-0.0.2-Linux-6.rpm
 ./fedora/45/QMdmm-0.0.2-Linux-dev-common.rpm
 ./fedora/45/QMdmm-0.0.2-Linux-dev6.rpm
 ./fedora/45/QMdmm-0.0.2-Linux-doc.rpm
-./fedora/45/repodata/1360d92c35fe33e623c6494af3f0c4edcbaa08028b0be06de66f0b75a6b060c9-other.xml.zst
-./fedora/45/repodata/5962aa60de9320ae7ea7b2485f6abdd8e2c096e0dccc5d62c8c3027cefab2928-primary.xml.zst
-./fedora/45/repodata/d0948f5c6e34d238ffab3529eaf0b130ef54f44fa13a738719ff16d4b166cd07-filelists.xml.zst
+./fedora/45/repodata/d61d141f2e8f2d6ffdff1227d4c5e4c3e16e193256f2ca0815572b74172bc36f-other.xml.zst
+./fedora/45/repodata/e120b04f856de2c3b4f3a6a57baed0c34e521822f20abe30862de66d2571dfb4-filelists.xml.zst
+./fedora/45/repodata/ffa38705c2fb8fddcc2b371062bcd038ad3cb75503260b25ed63b313af09a038-primary.xml.zst
 ./fedora/45/repodata/repomd.xml
 ./fedora/45/repodata/repomd.xml.asc
 ./fedora/rawhide/QMdmm-0.0.2-Linux-6.rpm
 ./fedora/rawhide/QMdmm-0.0.2-Linux-dev-common.rpm
 ./fedora/rawhide/QMdmm-0.0.2-Linux-dev6.rpm
 ./fedora/rawhide/QMdmm-0.0.2-Linux-doc.rpm
-./fedora/rawhide/repodata/2317872560f06606f78b704a816dcb4b541e811ecce6b2f55b1331c6a8bce18d-other.xml.zst
-./fedora/rawhide/repodata/5cc53126e38b2a20b0298d95428f28b6d4065869a45a4afe65554ba394278a88-filelists.xml.zst
-./fedora/rawhide/repodata/e08802eacd0db7e550a5e4e58794295cbdbfcf87d40d19fb9ebc5c7ed0084c5c-primary.xml.zst
+./fedora/rawhide/repodata/72ed767f8102b7e5736afe753fb139db95b264206377de1103c84e039ce25ec5-filelists.xml.zst
+./fedora/rawhide/repodata/77f4337eab9a23001c68f3553f4fe95426c07e586b416ae3df79390dd04b1fac-other.xml.zst
+./fedora/rawhide/repodata/b19eda9b55168a20c6e57ed9c4cd037765d0dec68c1fedbf5884b4e0d0e852b9-primary.xml.zst
 ./fedora/rawhide/repodata/repomd.xml
 ./fedora/rawhide/repodata/repomd.xml.asc
 ./index.html
@@ -226,6 +234,7 @@ is built at run time instead of being committed.
 ./keys/fedora/qmdmm-packages.gpg
 ./keys/fingerprints.txt
 ./keys/manjaro/qmdmm-packages.gpg
+./keys/qmdmm-root.asc
 ./keys/qmdmm-root.gpg
 ./keys/revoked-fixture-before.gpg
 ./keys/revoked-fixture.gpg
@@ -257,6 +266,12 @@ is built at run time instead of being committed.
 ./revoked-rpm/repodata/9b07d97dc6ececed89aac0650b67bfb292647fe9fbaca48f629465be5f53f82b-filelists.xml.zst
 ./revoked-rpm/repodata/repomd.xml
 ./revoked-rpm/repodata/repomd.xml.asc
+./rocky-keyring/qmdmm-release-rocky-10-1.0-1.noarch.rpm
+./rocky-keyring/repodata/20c004d739271a19dd62421dd12d985c16610e48b2ea9c22a0d7011161f3f94e-primary.xml.zst
+./rocky-keyring/repodata/8fee827cf220096ef49d3641d1164e3c75b3566eca1e36adf1e570006fcb86fe-other.xml.zst
+./rocky-keyring/repodata/fa09545c6cdce2af4558118840709acf2f35555716cb5deeed793829746f3a58-filelists.xml.zst
+./rocky-keyring/repodata/repomd.xml
+./rocky-keyring/repodata/repomd.xml.asc
 ./rocky-revoked/repodata/3bd99728eb28a15e8b4f1671af6d879600e1e2c33d4ef2912ab93e96ee57e9a6-primary.xml.zst
 ./rocky-revoked/repodata/3cf52b4d2f1d7580695bb72c713510e5746e916b485efeb90aa1b1e8ddcc19f2-filelists.xml.zst
 ./rocky-revoked/repodata/c58d1c3ad8f05aa1ae7cec1809fdb514379f9aba99f6de7fb9074f486a82c007-other.xml.zst
@@ -266,9 +281,9 @@ is built at run time instead of being committed.
 ./rocky/10/QMdmm-0.0.2-Linux-dev-common.rpm
 ./rocky/10/QMdmm-0.0.2-Linux-dev6.rpm
 ./rocky/10/QMdmm-0.0.2-Linux-doc.rpm
-./rocky/10/repodata/42ef142cd70797495c70a76831066f00fc62b7b5a7b2fea13063f9baa4b0da67-filelists.xml.zst
-./rocky/10/repodata/76dca9b908430b3e9a09a30eff786cba8c815977ecfbb5678f47207b44ef161d-other.xml.zst
-./rocky/10/repodata/a3ab7fb638ff9b6f014ebdc32019766ea6fd0f43f3ea6fbd014e2630a88dd1c6-primary.xml.zst
+./rocky/10/repodata/017c42ea5ea1f3b6822cfa88180352be3d33704aac3c26de27291f9f343a8f01-other.xml.zst
+./rocky/10/repodata/09b64f642601f8ec4ee0932ff8b62ad316cd9b2f71eeadfc8dd36f329b762140-filelists.xml.zst
+./rocky/10/repodata/5d24e2d4924d3c7ee81ed9d7b51c1ef490bae8da554c6eb751e6307abbdba7b4-primary.xml.zst
 ./rocky/10/repodata/repomd.xml
 ./rocky/10/repodata/repomd.xml.asc
 ./ubuntu/resolute/dists/resolute/InRelease
