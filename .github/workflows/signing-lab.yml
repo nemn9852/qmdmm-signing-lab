@@ -456,8 +456,8 @@ jobs:
   # it is supposed to leave both repositories configured and working. Nothing
   # else in this workflow installs it, so without this cell the claim "install
   # the package and you are set up" has no witness at all (FINDINGS 10.8).
-  stage-b-keyring-package:
-    name: "B keyring package (install it, then use only what it configured)"
+  stage-b-keyring-package-deb:
+    name: "B keyring package (deb: install it, then use only what it configured)"
     needs: [publish]
     runs-on: ubuntu-latest
     container:
@@ -479,6 +479,48 @@ jobs:
           ROOT_FPR: ${{ env.ROOT_FPR }}
           EXPECT_SHA: ${{ github.sha }}
         run: bash "$PWD/lab/consume-keyring-package.sh"
+
+  # ============ the rpm half of the same mechanism. A separate job rather than
+  # a branch inside consume-dnf.sh, because the two start from different places:
+  # consume-dnf.sh begins with a repository a consumer already trusts, and this
+  # one begins with nothing but a key fingerprint read off the website.
+  #
+  # Two cells, not one. rpm runs two live dnf generations across this matrix, and
+  # this is the flow where their differences bite - they disagree about what
+  # re-roots, where caches land, and whether to say anything at all when a
+  # repository cannot be verified (FINDINGS 3.2, 3.15). One verifier per family
+  # is exactly the assumption 10.8 calls out as the costly one.
+  stage-b-keyring-package-rpm:
+    name: "B keyring package (rpm ${{ matrix.line }} ${{ matrix.version }}, ${{ matrix.consumer }})"
+    needs: [publish]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { line: fedora, version: 44, consumer: dnf5, image: "fedora:44" }
+          - { line: rocky,  version: 10, consumer: dnf4, image: "rockylinux/rockylinux:10" }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Confirm no secret is reachable (a consumer's position)
+        env:
+          LEAK_CHECK: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LEAK_CHECK:-}" ]; then
+            echo "!! secret visible without declaring an environment"; exit 1
+          fi
+          echo "OK: this job sees no secret (same position as a consumer)"
+      - name: Install the release package and use only what it configured
+        env:
+          PAGES: ${{ env.LAB_PAGES }}
+          ROOT_FPR: ${{ env.ROOT_FPR }}
+          EXPECT_SHA: ${{ github.sha }}
+          LINE: ${{ matrix.line }}
+          VERSION: ${{ matrix.version }}
+        run: bash "$PWD/lab/consume-dnf-keyring-package.sh"
 
   # ============ and the measurement FINDINGS 3.1 asked for: does this consumer
   # refuse a key that has since been revoked? One cell per format the debian line

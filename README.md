@@ -20,7 +20,7 @@ something to start on every push.
 |---|---|---|---|
 | **A** pack | `stage-a-pack` × 12 | no | QMdmmPackagingCi's *own* `pack-<fmt>.sh` builds real packages inside the row's own distribution image |
 | **S** sign | `stage-s-sign` × 12 | **yes**, one per line | the row's subkey signs the repository it just built — and the root secret is *not* usable in that container |
-| **B** consume | `stage-b-consume` × 12, `stage-b-keyring`, `stage-b-keyring-package`, `stage-b-revoked` × 2, `stage-b-rotated` × 3 | no | a real consumer, holding no secret, establishes trust the way a user does and then installs from the published repository; the root key alone would not have been enough; a revoked key does not stop every consumer; and a **rotation** costs an un-refreshed consumer the repository outright — with the rpm cells also measuring which key file the rotated line should publish |
+| **B** consume | `stage-b-consume` × 12, `stage-b-keyring`, `stage-b-keyring-package-deb`, `stage-b-keyring-package-rpm` × 2, `stage-b-revoked` × 2, `stage-b-rotated` × 3 | no | a real consumer, holding no secret, establishes trust the way a user does and then installs from the published repository; the root key alone would not have been enough; the trust bootstrap actually leaves a **usable** repository behind (both the deb keyring package and, since the rpm side got one, the `*-release` package); a revoked key does not stop every consumer; and a **rotation** costs an un-refreshed consumer the repository outright — with the rpm cells also measuring which key file the rotated line should publish |
 | **C** taint | `stage-c-taint` × 4 | no | tampering with published metadata is detected — with the *untouched* copy as a control |
 | publish | `publish` | no | the site assembled on gh-pages **is** the repository layout |
 
@@ -97,6 +97,7 @@ points straight at it:
 |---|---|---|
 | `<pages>/<line>/<version>` | day-to-day source, subkey-signed — 12 of them | `deb [signed-by=…] <pages>/debian/sid sid main`<br>`baseurl=<pages>/fedora/44`<br>`Server = <pages>/arch/rolling` |
 | `<pages>/debian-keyring` | keyring source, **root**-signed | `deb [signed-by=…] <pages>/debian-keyring sid main` |
+| `<pages>/<line>-keyring` | keyring source for an rpm line (fedora, rocky), **root**-signed — ships one `*-release` package | one bootstrap stanza, then `dnf install qmdmm-release-<line>-<version>` |
 | `<pages>/debian-revoked` | fixture signed by a since-revoked subkey | nothing — a test asserts it is *rejected* |
 | `<pages>/revoked-rpm` `<pages>/revoked-pac` | repositories signed by the revoked fixture key | nothing — a test asserts both a rejection and, against the *same* artifact, an acceptance |
 | `<pages>/keys/…` | public keys + fingerprints | what every consumer in this lab fetches |
@@ -131,6 +132,12 @@ not share a verification implementation. A later openSUSE row would add a third
 ```
 keys/   published public keys
   qmdmm-root.gpg                  root only, no subkeys  -> the keyring repo's Signed-By
+  qmdmm-root.asc                  the same key, armored. The rpm side needs this
+                                  form twice over: `rpm --import` refuses the
+                                  binary export (FINDINGS 3.7), and `gpgkey=`
+                                  names a file under /etc/pki/rpm-gpg, which is
+                                  armored RPM-GPG-KEY convention. Rewritten by
+                                  mkkeyring-rpm.sh so the two cannot drift.
   <line>/qmdmm-packages.gpg       root + that line's subkey -> the day-to-day Signed-By
                                   (after a rotation: root + outgoing[revoked] + incoming,
                                    because a consumer that refreshed should be told
@@ -153,6 +160,11 @@ keys/   published public keys
 site/   material that must be built OFF-CI, staged at its published path
   debian-keyring/                 the root-signed keyring source, which now ships
                                   qmdmm-archive-keyring
+  <line>-keyring/                 the same thing for an rpm line (fedora, rocky):
+                                  the root-signed source that ships
+                                  qmdmm-release-<line>-<version>. Signed by the
+                                  root key alone, so this is what a consumer can
+                                  reach holding nothing but a fingerprint.
   debian-revoked/                 the revoked-subkey fixture (debian's rotation)
   <line>-revoked/                 the same thing for the rotated rpm and pacman
                                   lines: the source that line published immediately
@@ -163,6 +175,10 @@ lab/    the scripts — all reusable, all English
   consume-apt-keyring.sh          stage B, the half that is built off-CI
   consume-keyring-package.sh      stage B, install the keyring package and then
                                   delete every source but the one it configured
+  consume-dnf-keyring-package.sh  the rpm half of that same mechanism: bootstrap
+                                  on the root key alone, install the `*-release`
+                                  package, then delete the hand-written stanza and
+                                  use only what the package configured
   consume-revoked-{dnf,pacman}.sh stage B, revocation is only as good as the
                                   verifier (FINDINGS 10.7)
   consume-rotated-{dnf,pacman}.sh stage B, what a ROTATION does to a consumer
@@ -181,6 +197,15 @@ lab/    the scripts — all reusable, all English
   mkrepo-revoked-{rpm,pac}.sh     build the revoked-key fixtures — in CI, because
                                   the signing key exists only as a secret there
   mkkeyring-deb.sh                build <repo>-archive-keyring (off-CI)
+  mkkeyring-rpm.sh                build qmdmm-release-<line>-<version> AND the
+                                  ROOT-signed source that serves it (off-CI). The
+                                  package and the repodata are built on a machine
+                                  that has rpmbuild and createrepo_c - this one has
+                                  neither; the signature over repomd.xml is made
+                                  here, because the root secret is here. That is
+                                  the same split the deb side has, and it is why
+                                  the payload is only public key material and a
+                                  text file: nothing secret goes to the builder.
   rotate-line-local.sh            rotate any line's subkey (off-CI)
   genesis-production.sh           create the PRODUCTION root + one sign-only subkey
                                   per line, and the public/secret material each
@@ -220,6 +245,9 @@ enters a workflow, so both are run on a trusted machine:
     # rebuild the root-signed keyring source after a change to the layout
     bash lab/mkrepo-debian.sh <root-fpr> site/debian-keyring sid "keyring source (root-signed)"
 
+    # the rpm equivalent: the `*-release` package plus the source that serves it
+    bash lab/mkkeyring-rpm.sh fedora 44
+
     # rotate any line's subkey (debian|ubuntu|fedora|rocky|alma|arch|manjaro)
     bash lab/rotate-line-local.sh fedora
 
@@ -237,8 +265,11 @@ The rotation, in order, and steps 1 and 2 are the ones that cannot be undone:
    pacman lines, so it has to happen before the next publish rebuilds the row;
 2. revoke the outgoing subkey;
 3. add a fresh signing subkey;
-4. re-sign what only the root key may sign. For the deb lines that is the keyring
-   source. For the rpm and pacman lines there is no such artifact in this lab, so
+4. re-sign what only the root key may sign. For the deb line that is
+   `site/debian-keyring`; for an rpm line it is `site/<line>-keyring`, rebuilt by
+   `lab/mkkeyring-rpm.sh <line> <version>` — the package it ships carries the
+   line's key file, so re-running it is what moves that source onto the incoming
+   subkey. For the pacman lines there is still no such artifact in this lab, so
    the step is **absent and says so** rather than being skipped in silence;
 5. re-export the line's public key file as root + outgoing[revoked] + incoming —
    and, alongside it, `-pruned.gpg`: the same key file with the outgoing subkey

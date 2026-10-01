@@ -883,10 +883,15 @@ than gaps** - they are listed so that their absence is not read as an oversight.
   carrying the subkey buys the diagnosis nothing and costs the revocation, which
   is §10.9's conclusion.
 
-- **Only the deb format has a keyring/trust-artefact mechanism built at all.**
-  The rpm `*-release` package and the pacman keyring package that
-  distro-repo-trust-packaging describes do not exist in this lab - that is a
-  mechanism not yet built, rather than a check that is missing.
+- **The deb and rpm formats have a keyring/trust-artefact mechanism; pacman does
+  not, and on pacman that is an answer rather than a gap.** `site/debian-keyring`
+  serves `qmdmm-archive-keyring` and `site/<line>-keyring` serves the rpm
+  `*-release` package, each from a source only the root key signs, so each gives
+  a consumer holding nothing but a fingerprint a way in (README, "Running it").
+  On pacman no such package can be protected by repository configuration at all -
+  trust is one global keyring and the repo stanza does not scope it (§6) - so the
+  key has to be distributed out of band and checked by fingerprint. That is a
+  documentation problem, not a package waiting to be written.
 
 - **`stage-c-taint` covers four (format, consumer) pairs, not twelve rows**, on
   purpose: tamper detection is a property of the format and the refusal is a
