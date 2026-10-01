@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# The Alpine line's release key, generated the way abuild expects to find it.
+# The Alpine line's RELEASE key, generated the way abuild expects to find it.
 #
 # Alpine is the one line that is not GPG. abuild-keygen / abuild-sign are plain
 # shell around OpenSSL, and apk resolves a package's signature by looking for a
@@ -11,13 +11,36 @@
 # That is why the name is chosen here and why this runs before the first release
 # rather than after one.
 #
+# THIS LINE HOLDS TWO KEYS, and the naming is what tells them apart:
+#
+#   qmdmm-daily-<hex>    what ci/pack-apk.sh signs with every day. abuild calls
+#                        abuild-sign unconditionally - signing cannot be switched
+#                        off - so the daily build has to hold *some* key, and
+#                        this is the one it holds. Its output never leaves the
+#                        workflow: smoke packages travel as artifacts to stages
+#                        B and C and are not published, so no consumer ever needs
+#                        its public half and rotating it costs nobody anything.
+#                        This was the first key the line had, as
+#                        qmdmm-release-6abe0b34, and was renamed on 2026-10-01
+#                        when a second key arrived and the roles needed names.
+#                        The hex is deliberately the same one: the pair of names
+#                        should read as one key relabelled, not as a rotation
+#                        that never happened.
+#
+#   qmdmm-release-<hex>  what THIS script makes: the only key a consumer of a
+#                        published Alpine repository should trust. Its private
+#                        half goes to the `alpine` environment's SIGNING_KEY,
+#                        which the daily workflow does not declare and therefore
+#                        cannot reach. That environment boundary - not a promise
+#                        - is what keeps day-to-day signing off the release key.
+#
 # The name is "qmdmm-release-<hex>", the hex being a unix timestamp - the shape
 # abuild-keygen itself produces ("${emailaddr:-$USER}-<hex>"), i.e. a fresh name
-# per rotation with nothing platform-specific in it. The key it replaces was
-# called neve-6aaaace6 because abuild-keygen had defaulted the name from the
-# machine's user during a local run on 2026-09-16; a name that ends up in every
-# package's signature member and in every consumer's /etc/apk/keys is not a
-# place for one.
+# per rotation with nothing platform-specific in it. (The daily key's hex is the
+# one exception, for the reason above.) The name before both of these was
+# neve-6aaaace6, which abuild-keygen had defaulted from the machine's user during
+# a local run on 2026-09-16; a name that ends up in every package's signature
+# member and in every consumer's /etc/apk/keys is not a place for one.
 #
 # Two things this deliberately does NOT do, both the same decisions as
 # lab/genesis-production.sh:
@@ -30,8 +53,10 @@
 #     consumer to replace the file in /etc/apk/keys - the same repair a
 #     compromise would need, which is the cost of a line with no revocation.
 #
-# It refuses to run over an existing key: two keys for one line is what makes
-# "who signed this" unanswerable, and the file name is what apk matches on.
+# It refuses to run over an existing key of the same name. It cannot tell whether
+# a release key already exists under a *different* name - only the `alpine`
+# environment knows that - so the guard is on the files it is about to write, and
+# the printed instructions say what to compare against GitHub.
 set -euo pipefail
 
 PROD="${PROD:-$HOME/qmdmm-signing-prod}"
@@ -118,20 +143,38 @@ private key   $KEY   (0600, this machine only, no copy anywhere)
 public key    $PUB
 sha256(DER)   $fp
 
-One value in three places, and they have to agree or a package is
+One value in three places, and they have to agree or a published package is
 uninstallable: the committed file name, the file name inside the secret, and
-PACKAGER_KEY in the workflow.
+PACKAGER_KEY in the workflow that uses it.
 
-  1. commit the public half as
+Alpine holds two keys and they are not interchangeable. The daily one
+(qmdmm-daily-*) signs every day's build and is not touched here: nothing it
+signs is published, so no consumer is ever told to trust it. This key is the
+release half, and the only one a consumer of a published repository should end
+up with in /etc/apk/keys.
+
+  1. commit the public half next to the daily key's:
+
        QMdmm/QMdmmPackagingCi:packaging/alpine/$NAME.rsa.pub
-     and delete packaging/alpine/neve-6aaaace6.rsa.pub in the same commit;
 
-  2. set PACKAGER_KEY in .github/workflows/packaging-smoke.yml to exactly
-       $NAME
+     Nothing else in packaging/alpine/ changes and the daily key keeps its
+     name. The two are told apart by role in packaging/alpine/NOTES.md.
 
-  3. set the secret from this file, without its contents passing through
-     anything that prints:
+  2. put the private half in the line's environment, under the same secret name
+     the other seven lines use, so that every line's key is read out of
+     secrets.SIGNING_KEY and the environment the job declares is what picks the
+     line:
 
-       gh secret set PACKAGER_PRIVKEY -R QMdmm/QMdmmPackagingCi < "$KEY"
+       gh api -X PUT repos/QMdmm/QMdmmPackagingCi/environments/alpine
+       gh secret set SIGNING_KEY -R QMdmm/QMdmmPackagingCi --env alpine < "$KEY"
+
+     Not the repository-level secret: that one holds the DAILY key
+     (PACKAGER_PRIVKEY), every workflow in the repository can read it, and the
+     daily workflow is precisely the one that must not be able to sign a
+     release.
+
+  3. set PACKAGER_KEY to exactly the name above, in the workflow that publishes
+     (release.yml - not written yet; the daily workflow keeps
+     qmdmm-daily-6abe0b34 and is not edited).
 
 EOF

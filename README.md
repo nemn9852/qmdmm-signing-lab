@@ -221,7 +221,7 @@ lab/    the scripts — all reusable, all English
                                   prints the environment/secret commands rather
                                   than running them, because those leave traces
                                   that outlive a mistake in the script.
-  genesis-alpine-key.sh           create the PRODUCTION key for the Alpine line
+  genesis-alpine-key.sh           create the RELEASE key for the Alpine line
                                   (off-CI). Alpine is not a GPG line: abuild-sign
                                   is OpenSSL and apk matches the key by its file
                                   name, so there are no subkeys to split and no
@@ -229,7 +229,12 @@ lab/    the scripts — all reusable, all English
                                   is chosen here, before the first release, and
                                   why the private half stays on this machine
                                   alone. Not part of the GPG set above: it is
-                                  a second, independent key.
+                                  a second, independent key. The line holds two
+                                  of these - a daily one, because abuild cannot
+                                  be told not to sign, and a release one, which
+                                  is all a consumer ever sees - and this script
+                                  makes the release half; the daily half was
+                                  renamed to qmdmm-daily-* on 2026-10-01.
   assert-revision-tag.sh          assert a revision names a TAG upstream. The
                                   guard a release run needs and a smoke run does
                                   not; written here because it is the one piece
