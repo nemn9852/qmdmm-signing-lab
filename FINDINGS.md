@@ -1285,3 +1285,8 @@ never been used by anything and nothing in this run could have used it. That is
 the isolation working, and it is also why this run cannot be cited as evidence
 that the release key signs correctly: only a release run can say that, and
 `release.yml` does not exist yet.
+
+The run as a whole finished 18/18. The other fifteen cells do not touch the
+Alpine key, so that number is not evidence about the rename — it is the cheaper
+claim that the rename broke nothing else on the way, read while the workflow was
+running anyway.
