@@ -1257,3 +1257,31 @@ artifact (`file://$PWD/pkgs`), not from a published site, so it says nothing
 about a consumer fetching them over the network. And it says nothing about the
 seven GPG lines: their secrets remain unread in the sense above, and only
 `release.yml` signing with them can close that.
+
+### 11.2 The reading after the split
+
+Run `36845836638` (`2622a1b`) is the first in which the daily key and the release
+key exist separately, and it is the reading that says the rename did not touch the
+key. All three Alpine cells are green, and what matters in them is the names.
+
+* Stage A prints `the secret and packaging/alpine/qmdmm-daily-6abe0b34.rsa.pub
+  are the same pair ...` — the `cmp` between the secret's public half and the
+  committed file, which is the assertion that would fail first if the rename had
+  been a rotation. It passed, and the fingerprint is the one recorded before the
+  rename (`b0594d99…0b67`), which is the same claim measured a second way.
+* Stage A asserts `.SIGN.RSA.qmdmm-daily-6abe0b34.rsa.pub` is a member of each of
+  the four artefacts and of `APKINDEX.tar.gz`. That string is derived from
+  `$PACKAGER_KEY`, so what the assertion measures is that the workflow variable,
+  the committed file name and the signature member are one string.
+* Stage B installs that public half into `/etc/apk/keys/`, `apk update` reports
+  28652 packages available, and `apk add qmdmm` installs 126 packages. Stage C does
+  the same for `qmdmm-dev` and builds the consumer project against it. Neither
+  logs an `UNTRUSTED signature`.
+
+What this run does **not** say is anything about the release key. No job here
+declares the `alpine` environment, so no job can read `SIGNING_KEY` — the
+workflow's only two mentions of it are the comment saying so. The release key has
+never been used by anything and nothing in this run could have used it. That is
+the isolation working, and it is also why this run cannot be cited as evidence
+that the release key signs correctly: only a release run can say that, and
+`release.yml` does not exist yet.
