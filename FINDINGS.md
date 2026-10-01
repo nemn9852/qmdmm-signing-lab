@@ -375,6 +375,20 @@ than as an error. A script that runs in several images can only rely on what all
 of them have: the rotated dnf script runs in fedora and in rocky, and `diff` is in
 the second one only.
 
+The same shape, one level up, came in with issue #24. `lab/probe-matrix-tags.sh`
+asks whether the container tags the release matrix is built on will resolve, and it
+asks with `docker manifest inspect`. This machine has no container runtime at all,
+so every tag took the not-resolvable branch: nineteen lines of `MISSING` and a
+summary that reads as "issue #24 names tags that do not exist" when in fact nothing
+had been asked. The registry API is not a way around it either - it is not
+reachable from this machine (tried 2026-10-01, after the hub itself was ruled out).
+
+The script now checks for the runtime first and exits 2 saying that no reading was
+taken, and it separates "a runtime is present but no registry answers" from "the
+tag is missing". The rule the two cases share: a negative answer and an absent
+capability must not share a shape. Only one of them is evidence, and a check that
+could not run gets believed exactly as readily as one that ran and said no.
+
 ## 4. rpm is not one behaviour, and it is not an algorithm problem
 
 The lab assumed one rpm line would stand in for all rpm distros. That is wrong,
