@@ -188,6 +188,15 @@ lab/    the scripts — all reusable, all English
                                   prints the environment/secret commands rather
                                   than running them, because those leave traces
                                   that outlive a mistake in the script.
+  genesis-alpine-key.sh           create the PRODUCTION key for the Alpine line
+                                  (off-CI). Alpine is not a GPG line: abuild-sign
+                                  is OpenSSL and apk matches the key by its file
+                                  name, so there are no subkeys to split and no
+                                  revocation of any kind - which is why the name
+                                  is chosen here, before the first release, and
+                                  why the private half stays on this machine
+                                  alone. Not part of the GPG set above: it is
+                                  a second, independent key.
   assert-revision-tag.sh          assert a revision names a TAG upstream. The
                                   guard a release run needs and a smoke run does
                                   not; written here because it is the one piece
